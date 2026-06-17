@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tart-position-cal"
+version = "0.1.0"
+description = "Calibrate TART radio telescope antenna positions from survey measurements"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+authors = [
+    {name = "Tim Molteno", email = "tim@elec.ac.nz"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pandas>=2.0.0",
+    "odfpy>=1.4.0",
+    "matplotlib>=3.7.0",
+    "requests>=2.28.0",
+]
+
+[project.scripts]
+tart-position-cal = "tart_position_cal.scripts.tart_position_cal:main"
+
+[project.urls]
+Homepage = "http://github.com/tart-telescope/tart-position-cal"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+    "pytest>=7.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tart_position_cal"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/tart_position_cal",
+    "/example",
+]
