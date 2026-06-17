@@ -93,6 +93,10 @@ def main():
         default=10,
         help="Maximum IRLS outer iterations (default: 10).",
     )
+    parser.add_argument(
+        "--title",
+        help="Optional title prepended to all output file names (e.g. 'site-name').",
+    )
 
     args = parser.parse_args()
 
@@ -160,35 +164,36 @@ def main():
 
     # --- Save output ---
     json_out = result_to_json(result, n_ant)
-    with open(args.output, "w") as f:
+
+    def _titled(path):
+        """Return path with --title prepended to the filename, if set."""
+        if not args.title:
+            return path
+        d, base = os.path.split(path)
+        return os.path.join(d, f"{args.title}_{base}")
+
+    import os
+
+    output_path = _titled(args.output)
+    with open(output_path, "w") as f:
         json.dump(json_out, f)
-    print(f"Calibrated positions written to {args.output}")
+    print(f"Calibrated positions written to {output_path}")
 
     # --- Diagnostics ---
     print_residual_report(result, radius, m_ij, n_ant)
 
     # --- Plots ---
     if not args.no_plots:
-        import os
-
         final_pos = result_to_positions(result, n_ant)
-        plot_positions(
-            initial_guess,
-            final_pos,
-            os.path.join(args.plot_dir, "final_positions.png"),
-        )
-        print(f"Saved final_positions.png to {args.plot_dir}")
+        plot_path = _titled(os.path.join(args.plot_dir, "final_positions.png"))
+        plot_positions(initial_guess, final_pos, plot_path)
+        print(f"Saved {os.path.basename(plot_path)} to {args.plot_dir}")
 
-        plot_differences(
-            initial_guess,
-            final_pos,
-            os.path.join(args.plot_dir, "differences.png"),
-        )
-        print(f"Saved differences.png to {args.plot_dir}")
+        plot_path = _titled(os.path.join(args.plot_dir, "differences.png"))
+        plot_differences(initial_guess, final_pos, plot_path)
+        print(f"Saved {os.path.basename(plot_path)} to {args.plot_dir}")
 
         _, ij_res, _ = compute_residuals(result, radius, m_ij, n_ant)
-        plot_residual_histogram(
-            ij_res,
-            os.path.join(args.plot_dir, "residual_histogram.png"),
-        )
-        print(f"Saved residual_histogram.png to {args.plot_dir}")
+        plot_path = _titled(os.path.join(args.plot_dir, "residual_histogram.png"))
+        plot_residual_histogram(ij_res, plot_path)
+        print(f"Saved {os.path.basename(plot_path)} to {args.plot_dir}")
