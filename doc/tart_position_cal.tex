@@ -8,7 +8,7 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, shapes.geometric, positioning, calc}
 \usepackage{adjustbox}
-
+\usepackage[numbers,sort&compress]{natbib}
 
 %opening
 \title{Antenna Array Position Calibration for the Transient Array Radio Telescope}
@@ -21,7 +21,7 @@
 \maketitle
 
 \begin{abstract}
-The Transient Array Radio Telescope (TART) is an all-sky radio telescope designed to detect transient events. The antenna array contains 24 elements arranged on five spiral arms. For interferometric imaging, the positions of these antennas must be accurately known. This paper presents the technique used to calibrate the antenna positions. The technique is iterative, based on a least-squares minimization that reports outliers which are then re-measured. A method for determining the global orientation of the array using geographical bearings is also presented. This technique is robust, can be performed with simple equipment, and provides accuracy to within 0.01 wavelengths---sufficient for interferometric imaging. Results from the TART deployment at the University of Namibia (UNAM) are presented, demonstrating residual errors at the millimeter scale.
+The Transient Array Radio Telescope (TART) is an all-sky radio telescope designed to detect transient events. The antenna array contains 24 elements arranged on five spiral arms. For interferometric imaging, the positions of these antennas must be accurately known. This paper presents the technique used to calibrate the antenna positions. The technique is iterative, based on a least-squares minimization that reports outliers which are then re-measured. A method for determining the global orientation of the array using geographical bearings is also presented. This technique is robust, can be performed with simple equipment, and provides accuracy to within 0.01 wavelengths---sufficient for interferometric imaging. Results from the TART deployment at the University of Namibia (UNAM) are presented, demonstrating residual errors at the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}~\cite{moltento2026tartpositioncal}.
 \end{abstract}
 
 \section{Background and Introduction}
@@ -257,22 +257,7 @@ First, the current approach uses ordinary least squares, which treats all measur
 
 Second, the TART telescope operates in the L1 band at 1.575~GHz, which is shared with GNSS signals. The raw telescope data streams contain embedded GNSS satellite signals at known frequencies. Post-processing these signals via software-defined radio techniques could yield direct time-difference-of-arrival (TDOA) measurements between antenna pairs, providing an independent and fully automated means of estimating antenna positions. Since GNSS satellite ephemerides are precisely known, this approach could in principle determine absolute antenna positions without any manual surveying. The main challenge lies in the low signal-to-noise ratio of the GNSS signals in the TART's broad-beam antennas and the short baselines ($<$\,2~m), which produce TDOA values on the order of nanoseconds.
 
-\begin{thebibliography}{9}
-
-\bibitem{tart}
-T.~C.~A.~Molteno, ``Transient Array Radio Telescope,''
-\emph{Royal Astronomical Society Tools and Techniques}, submitted 2026.
-\url{https://tart.elec.ac.nz}
-
-\bibitem{scipy}
-P.~Virtanen \emph{et al.}, ``SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python,''
-\emph{Nature Methods}, vol.~17, pp.~261--272, 2020.
-
-\bibitem{proj}
-PROJ contributors, ``PROJ coordinate transformation software library,''
-Open Source Geospatial Foundation, 2024.
-\url{https://proj.org/}
-
-\end{thebibliography}
+\bibliographystyle{plainnat}
+\bibliography{position-cal}
 
 \end{document}

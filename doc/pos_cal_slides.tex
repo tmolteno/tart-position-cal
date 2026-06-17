@@ -64,6 +64,7 @@
   \item 24 antennas arranged on five spiral arms
   \item Often installed during week-long workshops combining radio astronomy and hands-on telescope assembly
   \item \textbf{Key requirement:} antenna positions must be known to within $\approx 5$~mm for interferometric imaging
+  \item Calibration algorithm implemented in \texttt{tart-position-cal}~\cite{moltento2026tartpositioncal}
 \end{itemize}
 \end{frame}
 
@@ -345,6 +346,11 @@ $i$ & $j$ & Res. (mm) & $i$ & $j$ & Res. (mm) \\
   \item Potential for fully automated, absolute position calibration without manual surveying
   \item Challenge: low SNR in broad-beam antennas, short baselines ($<$\,2~m) $\to$ nanosecond TDOA
 \end{itemize}
+\end{frame}
+
+\begin{frame}[allowframebreaks]{References}
+\bibliographystyle{plainnat}
+\bibliography{position-cal}
 \end{frame}
 
 \end{document}

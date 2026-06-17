@@ -3,6 +3,8 @@
 tart_position_cal.pdf
 pos_cal_slides.pdf
 *.aux
+*.bbl
+*.blg
 *.nav
 *.out
 *.snm
