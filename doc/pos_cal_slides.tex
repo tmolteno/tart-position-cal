@@ -1,0 +1,350 @@
+\documentclass[ignorenonframetext]{beamer}
+\usepackage{textpos}
+\usepackage{graphicx}
+\usepackage{pgf}
+\usepackage{listings}
+\usepackage{multimedia}
+\usepackage{gensymb}
+\usepackage{amsmath, mathrsfs}
+\usepackage{adjustbox}
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+
+\usetikzlibrary{shapes.geometric, arrows.meta, calc, positioning}
+
+\lstdefinestyle{yaml}{
+     basicstyle=\ttfamily\color{blue}\tiny,
+     rulecolor=\color{black},
+     string=[s]{'}{'},
+     stringstyle=\color{blue},
+     comment=[l]{:},
+     commentstyle=\color{black},
+     morecomment=[l]{-}
+ }
+
+\usetheme{Boadilla}
+\usefonttheme{serif}
+
+\title[TART Position Cal]{Antenna Array Position Calibration for the Transient Array Radio Telescope}
+
+\author[Molteno]{Tim Molteno}
+
+\institute[Otago]
+{
+  Electronics Research Foundation, New Zealand \\
+  \& \\
+  Dept of Physics,
+  University of Otago, New Zealand \\
+  \& \\
+  Dept of Physics \& Electronics,
+  Rhodes University, South Africa \\
+  \vspace{1cm}
+  \vspace{2cm}
+  \includegraphics[width=0.6\linewidth]{fig/elec_header_font.pdf}
+}
+
+\logo{\pgfputat{\pgfxy(-0.72,7.7)}{\pgfbox[center,base]{\includegraphics[width=1cm]{fig/elec_logo.pdf}}}}
+
+\date[TART Mada 2026]{}
+
+\begin{document}
+
+% --- Title ---
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% --- Introduction ---
+
+\begin{frame}{The Transient Array Radio Telescope (TART)}
+\begin{itemize}
+  \item All-sky imaging interferometer operating at L1 band (1.575~GHz)
+  \item Open-source project --- deployed widely for radio transient detection and imaging algorithm development
+  \item 24 antennas arranged on five spiral arms
+  \item Often installed during week-long workshops combining radio astronomy and hands-on telescope assembly
+  \item \textbf{Key requirement:} antenna positions must be known to within $\approx 5$~mm for interferometric imaging
+\end{itemize}
+\end{frame}
+
+\begin{frame}{The Position Calibration Problem}
+\begin{itemize}
+  \item Initial positions come from nominal design --- in practice, construction deviates
+  \item Must determine accurate antenna coordinates using easy-to-make measurements
+  \item Must be robust to inevitable measurement errors
+  \item Must fix the global rotation (distance measurements alone cannot determine orientation)
+  \item Goal: accuracy to within 0.01 wavelengths at 1.575~GHz ($\approx 2$~mm)
+\end{itemize}
+\end{frame}
+
+% --- Botswana calibration photo ---
+
+\begin{frame}
+ \includegraphics[width=\linewidth]{fig/botswana_calibration.png}
+ \vspace{4pt}
+ {\small Aerial view of a TART being calibrated by attendees at a TART workshop hosted at the Botswana International University of Science and Technology, March 2025.}
+\end{frame}
+
+% --- Method: Measurements ---
+
+\begin{frame}{Two Kinds of Measurements}
+\begin{columns}
+ \begin{column}{0.55\linewidth}
+  \textbf{Radial distances} $r_i$ (24 measurements):
+  \begin{itemize}
+    \item Distance from phase centre to each antenna centre
+    \item High confidence --- single span of tape measure
+  \end{itemize}
+  \vspace{12pt}
+  \textbf{Pairwise distances} $\delta_{ij}$ (276 measurements):
+  \begin{itemize}
+    \item Distance between each pair of antennas
+    \item $\frac{1}{2} N (N-1)$ unique pairs for $N=24$ antennas
+    \item More susceptible to measurement errors
+  \end{itemize}
+ \end{column}
+ \begin{column}{0.45\linewidth}
+  \textbf{Global rotation constraint:}
+  \begin{itemize}
+    \item Distance measurements are rotation-invariant
+    \item Need one geographic bearing to fix absolute orientation
+    \item Align one antenna arm with a distant, identifiable landmark
+  \end{itemize}
+ \end{column}
+\end{columns}
+\end{frame}
+
+% --- Spreadsheet ---
+
+\begin{frame}{Measurement Recording}
+ \includegraphics[width=\linewidth]{fig/spreadsheet.png}
+ \vspace{4pt}
+ {\small Spreadsheet with measurements from a TART array. Highlighted: distance between antenna 17 and antenna 8 (in mm).}
+\end{frame}
+
+% --- Least Squares Estimator ---
+
+\begin{frame}{Least Squares Estimator}
+
+Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{ij}$, form:
+
+\begin{align}
+ L(x, y) &= L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y) \\[4pt]
+ L_r(x,y) &= \sum_{i=1}^{N} \left( r_i - \sqrt{x_i^2 + y_i^2} \right)^2 \\[4pt]
+ L_{ij}(x,y) &= \sum_{i,j=1}^{N} \left( \delta_{ij} - \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \right)^2 \\[4pt]
+ L_\theta(x,y) &= \left( \theta_k - \arctan\!\left(\frac{x_k}{y_k}\right) \right)^2
+\end{align}
+
+\vspace{4pt}
+{\small $L_r$: radial residuals. $L_{ij}$: pairwise distance residuals. $L_\theta$: rotation constraint (antenna $k$ at measured bearing $\theta_k$). $\lambda \approx 100$ strongly enforces rotation. Radial term weighted $\times 10$ vs.\ pairwise.}
+\end{frame}
+
+% --- Global Orientation Calibration ---
+
+\begin{frame}{Global Orientation Calibration}
+  \includegraphics[width=\linewidth]{../ghana/antenna_9_dish.jpg}
+\begin{columns}
+ \begin{column}{0.5\linewidth}
+  \begin{enumerate}
+    \item Identify an antenna arm aligned with a distant landmark visible on satellite imagery
+    \item Record GPS coordinates of telescope and landmark
+  \end{enumerate}
+ \end{column}
+ \begin{column}{0.5\linewidth}
+  \begin{enumerate}
+    \item Compute forward azimuth (bearing)
+    \item Constrain that antenna's bearing in the least-squares minimization
+  \end{enumerate}
+ \end{column}
+\end{columns}
+\end{frame}
+
+% --- Algorithm ---
+
+\begin{frame}{Optimization Algorithm}
+\begin{itemize}
+  \item Start with \textbf{initial estimates} $\{x_i, y_i\}$ from the telescope's nominal design (API or JSON config)
+  \item Compute simulated measurements:
+  \begin{equation*}
+    r_i^s = \sqrt{x_i^2 + y_i^2}, \qquad
+    \delta_{ij}^s = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}
+  \end{equation*}
+  \item Minimize $L(x,y)$ using \textbf{L-BFGS-B} (SciPy library)
+  \item Compute residuals: $\epsilon_i = r_i - r_i^s$, $\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$
+  \item Flag outliers where $|\epsilon| > \tau$, re-measure, and repeat
+  \item Converges when all residuals are acceptable
+\end{itemize}
+\end{frame}
+
+% --- Flowchart ---
+
+\begin{frame}{Iterative Calibration Process}
+\vspace{-8pt}
+\begin{center}
+\adjustbox{max width=0.5\linewidth}{%
+\begin{tikzpicture}[
+    node distance=6mm and 4mm,
+    box/.style={rectangle, draw, rounded corners=3pt, minimum width=32mm, minimum height=10mm, align=center, font=\small},
+    decision/.style={diamond, draw, aspect=1.5, minimum width=32mm, minimum height=10mm, align=center, inner sep=0pt},
+    arrow/.style={-{Stealth[scale=0.9]}, thick},
+]
+
+\node[box] (start)                    {Initial position\\estimates $\{x_i, y_i\}$};
+\node[box] (measure) [below=of start] {Take measurements\\$r_i$ (radial), $\delta_{ij}$ (pairwise)};
+\node[box] (optimize) [below=of measure] {Least-squares\\minimization of $L(x,y)$};
+\node[box] (residuals) [below=of optimize] {Compute residuals\\$\epsilon_i = r_i - r_i^s$,\\$\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$};
+\node[decision] (check) [below=of residuals] {Any $|\epsilon| > \tau$?};
+\node[box] (flag) [below=of check, xshift=-22mm] {Flag outliers \&\\re-measure pairs};
+\node[box] (done) [below=of check, xshift=22mm]  {Output calibrated\\antenna positions};
+
+\draw[arrow] (start)    -- (measure);
+\draw[arrow] (measure)  -- (optimize);
+\draw[arrow] (optimize) -- (residuals);
+\draw[arrow] (residuals) -- (check);
+
+\draw[arrow] (check) -| node[above, xshift=-9mm, font=\footnotesize] {yes} (flag);
+\draw[arrow] (check) -| node[above, xshift=9mm, font=\footnotesize]  {no}  (done);
+
+\draw[arrow, overlay] (flag.west) -- ++(-5mm,0) |- (measure.west);
+
+\end{tikzpicture}%
+}
+\end{center}
+\end{frame}
+
+% --- Final positions ---
+
+\begin{frame}{Calibrated Positions}
+ \includegraphics[width=\linewidth]{fig/final_positions.png}
+ \vspace{4pt}
+ {\small Initial position estimates (blue) and final calibrated positions (orange). Note the constructed array has clockwise-oriented spiral arms --- opposite to the initial assumption.}
+\end{frame}
+
+% --- UNAM Deployment ---
+
+\begin{frame}{Results: UNAM Deployment}
+\vspace{-4pt}
+\begin{itemize}
+  \item TART telescope at University of Namibia (Windhoek): $(-22.6121^\circ, 17.0568^\circ)$
+  \item 24 antennas on 5 spiral arms, max radius $\approx 1.7$~m
+\end{itemize}
+\vspace{4pt}
+\textbf{Initial conditions:}
+\begin{itemize}
+  \item Initial cost $L(x,y) = 6.5 \times 10^7$ --- substantial disagreement with measurements
+\end{itemize}
+\vspace{4pt}
+\textbf{Global orientation:}
+\begin{itemize}
+  \item Reference: antenna~3 aligned with distant hill at $(-22.553822^\circ, 17.077290^\circ)$
+  \item Computed bearing: $\beta = 18.1125^\circ$
+\end{itemize}
+\vspace{4pt}
+\textbf{Calibration outcome:}
+\begin{itemize}
+  \item L-BFGS-B converged in 117 iterations
+  \item Final cost: $L(x,y) = 7.66 \times 10^2$
+  \item 90th percentile of absolute residuals: \textbf{1.53~mm} ($\approx 0.008\lambda$ at L1)
+\end{itemize}
+\end{frame}
+
+% --- UNAM differences ---
+
+
+% --- Position table ---
+
+\begin{frame}{UNAM Calibrated Antenna Positions}
+\vspace{-8pt}
+{\small Coordinates in meters relative to phase centre $[0,0]$.}
+\begin{center}
+\begin{tabular}{|r|r|r||r|r|r|}
+\hline
+Ant. & $x$ (m) & $y$ (m) & Ant. & $x$ (m) & $y$ (m) \\
+\hline
+ 0 & $-0.054$ &  $0.341$ & 12 &  $0.562$ & $-1.066$ \\
+ 1 & $-0.025$ &  $0.841$ & 13 &  $0.456$ & $-1.398$ \\
+ 2 &  $0.181$ &  $1.202$ & 14 &  $0.246$ & $-1.679$ \\
+ 3 &  $0.461$ &  $1.409$ & 15 & $-0.144$ & $-0.299$ \\
+ 4 &  $0.796$ &  $1.510$ & 16 & $-0.465$ & $-0.685$ \\
+ 5 &  $0.304$ &  $0.164$ & 17 & $-0.845$ & $-0.853$ \\
+ 6 &  $0.790$ &  $0.292$ & 18 & $-1.194$ & $-0.851$ \\
+ 7 &  $1.195$ &  $0.207$ & 19 & $-1.523$ & $-0.733$ \\
+ 8 &  $1.476$ &  $0.002$ & 20 & $-0.797$ &  $0.241$ \\
+ 9 &  $1.674$ & $-0.287$ & 21 & $-1.074$ &  $0.550$ \\
+10 &  $0.248$ & $-0.231$ & 22 & $-1.182$ &  $0.882$ \\
+11 &  $0.517$ & $-0.654$ & 23 & $-1.173$ &  $1.232$ \\
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+% --- Residuals ---
+
+\begin{frame}{Residual Analysis}
+\begin{columns}
+ \begin{column}{0.5\linewidth}
+  \includegraphics[width=\linewidth]{../na-unam/residual_histogram.png}
+  \vspace{4pt}
+  {\small 90th percentile of absolute residuals: \textbf{1.53~mm}. Distribution is symmetric around zero.}
+ \end{column}
+ \begin{column}{0.5\linewidth}
+  \begin{itemize}
+    \item Residuals = difference between measured and simulated distances after calibration
+    \item Large residuals typically indicate measurement errors
+    \item These are flagged for re-measurement in the next iteration
+    \item Sub-millimeter accuracy for the majority of antenna pairs
+  \end{itemize}
+ \end{column}
+\end{columns}
+\end{frame}
+
+% --- Large residuals ---
+
+\begin{frame}{UNAM: Largest Residuals}
+\vspace{-8pt}
+{\small Residuals exceeding the 90th percentile (1.53~mm). Negative = measured distance was smaller than calibrated distance.}
+\begin{center}
+\begin{tabular}{rrr||rrr}
+\hline
+$i$ & $j$ & Res. (mm) & $i$ & $j$ & Res. (mm) \\
+\hline
+19 & 9  & 5.0  & 14 & 4  & $-2.2$ \\
+17 & 16 & 4.4  & 12 & 3  & $-2.1$ \\
+ 9 & 2  & 4.2  & 12 & 0  & $-2.0$ \\
+17 & 4  & 3.6  & 14 & 0  & $-2.0$ \\
+22 & 12 & 3.3  & 17 & 9  & $-2.0$ \\
+14 & 1  & $-3.2$ & 19 & 4  & $-2.8$ \\
+17 & 8  & $-2.8$ & 22 & 9  & $-2.3$ \\
+ 5 & 2  & $-2.2$ &     &    &       \\
+\hline
+\end{tabular}
+\end{center}
+\vspace{4pt}
+{\small These outliers would be re-measured in the next iteration.}
+\end{frame}
+
+% --- Conclusions ---
+
+
+% --- Future Work ---
+
+\begin{frame}{Improvements}
+\vspace{-4pt}
+\textbf{Iteratively Reweighted Least Squares:}
+\begin{itemize}
+  \item Current OLS treats all measurements equally
+  \item IRLS with Huber loss: quadratic for small residuals, linear for large ones
+  \item Automatically down-weights outliers without manual re-measurement
+\end{itemize}
+\vspace{8pt}
+\textbf{GNSS-based Calibration:}
+\begin{itemize}
+  \item TART shares L1 band (1.575~GHz) with GNSS signals
+  \item Raw telescope data contain embedded GNSS satellite signals
+  \item Software-defined radio post-processing could yield direct TDOA measurements
+  \item Potential for fully automated, absolute position calibration without manual surveying
+  \item Challenge: low SNR in broad-beam antennas, short baselines ($<$\,2~m) $\to$ nanosecond TDOA
+\end{itemize}
+\end{frame}
+
+\end{document}

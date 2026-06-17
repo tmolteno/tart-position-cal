@@ -1,0 +1,10 @@
+.qwen
+*.toc
+tart_position_cal.pdf
+pos_cal_slides.pdf
+*.aux
+*.nav
+*.out
+*.snm
+*.log
+*.gz
