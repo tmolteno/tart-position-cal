@@ -215,7 +215,7 @@ Antenna & $x$ (m) & $y$ (m) \\
 
 \subsection{Residual Analysis}
 
-The residuals of the pairwise distance measurements after calibration are shown in Figure~\ref{fig:unam_residuals}. The 90th percentile of the absolute residuals is 1.53~mm, indicating that the calibrated positions reproduce the measured distances with sub-millimeter accuracy for the majority of antenna pairs. The largest residuals, listed in Table~\ref{tab:large_residuals}, range up to 5.0~mm and are concentrated in a small number of antenna pairs. These outliers typically indicate measurement errors in the original survey data and would be re-measured in a subsequent iteration of the calibration process.
+The residuals of the pairwise distance measurements after calibration are shown in Figure~\ref{fig:unam_residuals}. The inter-antenna residual statistics are: median absolute deviation 0.57~mm, standard deviation 1.07~mm, 50th percentile of absolute residuals 0.57~mm, and 90th percentile 1.53~mm. These indicate that the calibrated positions reproduce the measured distances with sub-millimeter accuracy for the majority of antenna pairs. The largest residuals, listed in Table~\ref{tab:large_residuals}, range up to 5.0~mm and are concentrated in a small number of antenna pairs. These outliers typically indicate measurement errors in the original survey data and would be re-measured in a subsequent iteration of the calibration process.
 
 \begin{figure}
  \includegraphics[width=\linewidth]{fig/residual_histogram.png}
@@ -255,7 +255,7 @@ Antenna $i$ & Antenna $j$ & Residual (mm) \\
 
 When survey measurements contain outliers---erroneous distance readings from misaligned tape measures or transcription errors---ordinary least squares can be skewed by those bad measurements. To address this, the \texttt{tart-position-cal} package includes an Iteratively Reweighted Least Squares (IRLS) option, invoked with the \texttt{--irls} flag. IRLS solves a series of weighted least-squares problems, recomputing per-measurement weights after each iteration to down-weight outliers. Two weight functions are available: Tukey's bisquare (default), which zeros out clear outliers entirely, and Huber, which caps the influence of outliers with a saturating linear penalty.
 
-Applying IRLS with Tukey weights to the UNAM data reduced the 90th percentile of absolute pairwise residuals from 1.53~mm to 1.50~mm, while automatically down-weighting the largest outliers without requiring manual re-measurement. The outer loop converged in 10 iterations. Figure~\ref{fig:irls_residuals} shows the residual histogram for the IRLS calibration, which is slightly narrower than the ordinary least-squares result. Compared to the manual iterative re-measurement workflow, IRLS provides a fully automated path to a robust solution, though manual verification of flagged outlier pairs remains advisable for critical deployments.
+Applying IRLS with Tukey weights to the UNAM data reduced the inter-antenna residual statistics: median absolute deviation from 0.57~mm to 0.51~mm, standard deviation from 1.07~mm to 1.10~mm, 50th percentile from 0.57~mm to 0.51~mm, and 90th percentile from 1.53~mm to 1.50~mm. The outer loop converged in 10 iterations. Figure~\ref{fig:irls_residuals} shows the residual histogram for the IRLS calibration. Compared to the manual iterative re-measurement workflow, IRLS provides a fully automated path to a robust solution, though manual verification of flagged outlier pairs remains advisable for critical deployments.
 
 \begin{figure}
  \includegraphics[width=\linewidth]{fig/irls_residual_histogram.png}
@@ -268,7 +268,7 @@ Applying IRLS with Tukey weights to the UNAM data reduced the 90th percentile of
 
 The least-squares position calibration method presented here provides a practical and accurate means of determining antenna positions for the TART radio telescope. The technique requires only a tape measure and a means of recording geographic coordinates for one reference bearing, making it suitable for workshop-based telescope deployments.
 
-Results from the UNAM deployment demonstrate that the method converges reliably from initial position errors on the order of tens of millimeters to a solution with millimeter-scale residuals. The 90th percentile of residuals of 1.53~mm corresponds to approximately $0.008\lambda$ at the L1 frequency, well within the requirement for interferometric imaging.
+Results from the UNAM deployment demonstrate that the method converges reliably from initial position errors on the order of tens of millimeters to a solution with millimeter-scale residuals. The median absolute deviation of 0.57~mm and 90th percentile of 1.53~mm correspond to approximately $0.003\lambda$ and $0.008\lambda$ at the L1 frequency, well within the requirement for interferometric imaging.
 
 The iterative nature of the method, with outlier flagging and re-measurement, makes it robust to the inevitable measurement errors that occur during manual surveying. The calibrated positions can be uploaded directly to the telescope API and used for imaging without further adjustment.
 

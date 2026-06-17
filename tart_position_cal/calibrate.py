@@ -354,15 +354,19 @@ def result_to_positions(result, n_ant):
     return result.x.reshape((n_ant, 2))
 
 
-def result_to_json(result, n_ant):
+def result_to_json(result, n_ant, title=None):
     """Convert an OptimizeResult to the API-compatible JSON dict.
 
     Positions are rounded to 3 decimal places (metres) with z=0.
+    If *title* is provided, it is included as a ``"title"`` key.
     """
     pos_mm = result_to_positions(result, n_ant)
     out = np.zeros((n_ant, 3))
     out[:, :2] = np.round(pos_mm / 1000.0, 3)
-    return {"antenna_positions": out.tolist()}
+    d = {"antenna_positions": out.tolist()}
+    if title is not None:
+        d["title"] = title
+    return d
 
 
 def compute_residuals(result, radius, m_ij, n_ant):
@@ -450,16 +454,24 @@ def print_residual_report(result, radius, m_ij, n_ant):
     for i in range(n_ant):
         print(f"  Ant {i:2d}: {r_res[i]:+7.2f}")
 
-    pct = 90
-    p95 = np.percentile(np.abs(ij_res), pct)
-    print(f"\n{pct}th percentile of |ij residuals|: {p95:.2f} mm")
+    abs_ij = np.abs(ij_res)
+    mad = np.median(np.abs(ij_res - np.median(ij_res)))
+    std = np.std(ij_res)
+    p50 = np.percentile(abs_ij, 50)
+    p90 = np.percentile(abs_ij, 90)
+
+    print(f"\nInter-antenna residual statistics:")
+    print(f"  Median Absolute Deviation: {mad:.2f} mm")
+    print(f"  Standard Deviation:       {std:.2f} mm")
+    print(f"  50th percentile |res|:    {p50:.2f} mm")
+    print(f"  90th percentile |res|:    {p90:.2f} mm")
 
     big = []
     for r, (i, j) in zip(ij_res, pairs):
-        if np.abs(r) > p95 and i > j:
+        if np.abs(r) > p90 and i > j:
             big.append((r, i, j))
 
     if big:
-        print(f"\nLargest residuals (>p{pct}):")
+        print(f"\nLargest residuals (>90th pct):")
         for r, i, j in sorted(big):
             print(f"  res[{i},{j}] = {r:+.1f}")

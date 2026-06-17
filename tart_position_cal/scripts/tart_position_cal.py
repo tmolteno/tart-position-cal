@@ -163,7 +163,7 @@ def main():
         print(f"  Function evaluations: {result.nfev}")
 
     # --- Save output ---
-    json_out = result_to_json(result, n_ant)
+    json_out = result_to_json(result, n_ant, title=args.title)
 
     def _titled(path):
         """Return path with --title prepended to the filename, if set."""
