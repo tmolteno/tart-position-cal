@@ -13,6 +13,7 @@
 %opening
 \title{Antenna Array Position Calibration for the Transient Array Radio Telescope}
 \author[1,2,*]{Timothy C.A. Molteno, \orcidlink{0000-0002-2022-0380}}
+\author[1]{Kirsten E. Franklin}
 \affil[1]{Department of Physics, University of Otago, Box 56, Dunedin, New Zealand}
 \affil[2]{Department of Physics \& Electronics, Rhodes University, Makhanda, South Africa}
 \affil[*]{Corresponding Author: tim@elec.ac.nz}
@@ -54,18 +55,33 @@ As the distance measurements do not constrain the global rotation of the array, 
 
 The purpose of the algorithm is to estimate the 24 antenna positions in the $x$--$y$ plane that are most consistent with the measurements.
 
-\subsection{Least Squares Estimator}
 
-Given a set $\{x_i, y_i\}$ of 24 antenna positions, and the measurements $r_i$, $\delta_{ij}$, we form a least-squares estimator, $oL(x,y)$:
+\subsection{Global Orientation Calibration}
 
+The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase-centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase-centre must be measured independently.
+
+This is accomplished by identifying an antenna that has a radial vector that aligns with a distant, identifiable landmark visible on satellite imagery (e.g.\ Google Maps). The geographic coordinates (latitude and longitude) of both the phase-centre and the landmark are recorded. 
+
+From these two geographic coordinates, the expected bearing $\theta_k$ of the reference antenna $k$ is computed:
+This $\theta_k$ measurement is supplied to the least-squares procedure (as $L_\theta$ in Equation~4).
+described below. In the software described in~\ref{sec:software} $\theta_k$ is computed as an inverse geodesic problem implemented in the PROJ library~\cite{proj}.
+
+Given any set $\{x_i, y_i\}$ of 24 antenna positions we can simulate all the measurements, $\theta_k'$, $\delta_{ij}'$ and $\theta_k'$ that we would expect.
 \begin{align}
- L(x, y) &= L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y) \\
- L_r(x,y) &= \sum_{i=1}^{N} \left( r_i - \sqrt{x_i^2 + y_i^2} \right)^2 \\
- L_{ij}(x,y) &= \sum_{i,j=1}^{N} \left( \delta_{ij} - \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \right)^2 \\
- L_\theta(x,y) &= \left( \theta_k - \arctan\!\left(\frac{x_k}{y_k}\right) \right)^2
+ r_i' &=  \sqrt{x_i^2 + y_i^2} \\
+ \delta_{ij}' &= \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \\
+ \theta_k' &= \arctan\!\left(\frac{x_k}{y_k}\right)
 \end{align}
 
-where $L_r$ corresponds to the radius measurement residuals, $L_{ij}$ to the pairwise distance residuals, and $L_\theta$ to the global rotation constraint. Here $\theta_k$ is the measured geographic bearing of antenna $k$ relative to the phase centre, and $\lambda$ is a weighting factor (typically $\lambda = 100$) that ensures the rotation constraint is strongly enforced. In practice, the radial residual term is also weighted by a factor of 10 relative to the pairwise term, reflecting the higher confidence in the radial measurements.
+These simulated measurements will be close to the recorded measurements if the $\{x_i, y_i\}$ are close to the true values. The differences between the simulated measurements and the actual measurements are called {\em residuals}. The set of positions that minimizes the squared residuals $L(\{x_i, y_i\})$, is a good estimate of the true antenna positions $\{x_i, y_i\}$.
+\begin{align}
+ L(x, y) &= L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y) \\
+ L_r(x,y) &= \sum_{i=1}^{N} \left( r_i - r_i' \right)^2 \\
+ L_{ij}(x,y) &= \sum_{i,j=1}^{N} \left( \delta_{ij} -  \delta_{ij}' \right)^2 \\
+ L_\theta(x,y) &= \left( \theta_k - \theta_k' \right)^2
+\end{align}
+Where 
+In practice, the angular residual term is also weighted by a factor of $\lambda$ relative to the pairwise term, reflecting the higher confidence in the radial measurements.
 
 \subsection{Algorithm}
 
@@ -85,31 +101,7 @@ tart-position-cal \
  \caption{Initial position estimates (blue) and the final calibrated positions (orange) for the TART antenna array. Antenna indices are labeled. This shows that the antenna, as constructed was assembled with the spiral arms clockwise oriented, in contrast to the initial position assumptions. }
 \end{figure*}
 
-\subsection{Global Orientation Calibration}
 
-The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase centre must be measured.
-
-This is accomplished by identifying an antenna arm that aligns with a distant, identifiable landmark visible on satellite imagery (e.g.\ Google Maps). The geographic coordinates (latitude and longitude) of both the telescope site and the landmark are recorded. Using the WGS84 ellipsoid model, the forward azimuth (bearing) from the telescope to the landmark is computed via the inverse geodesic problem as implemented in the PROJ library~\cite{proj}:
-
-\begin{multline}
-\beta = \text{atan2}\bigl(\sin\Delta\lambda \cos\phi_2, \\
-\cos\phi_1 \sin\phi_2 - \sin\phi_1 \cos\phi_2 \cos\Delta\lambda\bigr)
-\end{multline}
-
-where $\phi_1, \lambda_1$ are the telescope coordinates, $\phi_2, \lambda_2$ are the landmark coordinates, and $\Delta\lambda = \lambda_2 - \lambda_1$. This gives the geographic bearing $\beta$ (degrees clockwise from true North).
-
-\begin{figure*}
- \includegraphics[width=\linewidth]{fig/antenna_9_dish.jpg}
- \caption{At the Ghana TART site, antenna~9 of the TART array aligns approximately with a distant radio telescope dish. This alignment is used to determine the global rotation of the array.}
-\end{figure*}
-
-From the array geometry, the expected bearing $\theta_k$ of the reference antenna $k$ is computed from its coordinates in the array's local coordinate system:
-
-\begin{equation}
-\theta_k = 90^\circ - \arctan\!\left(\frac{y_k}{x_k}\right)
-\end{equation}
-
-The rotation correction $\Delta\theta$ is then:
 
 \begin{equation}
 \Delta\theta = -(\theta_k - \beta)
@@ -161,6 +153,10 @@ The differences between the simulated measurements of the calibrated positions a
  \caption{Histogram of the pairwise distance residuals after calibration, showing that the calibrated positions closely match the measurements. The distribution is centered near zero with a narrow spread.}
 \end{figure}
 
+
+\section{The tart-position-cal python package}
+\label{sec:software}
+
 \section{Results: UNAM Deployment}
 
 The TART telescope at the University of Namibia (UNAM) in Windhoek is located at latitude $-22.6121^\circ$, longitude $17.0568^\circ$. The 24 antennas are arranged on five spiral arms, extending to a maximum radius of approximately 1.7~m from the phase centre.
@@ -183,7 +179,7 @@ The L-BFGS-B optimizer converged after 117 iterations, reducing the cost functio
  \label{fig:unam_differences}
 \end{figure}
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \caption{Calibrated antenna positions for the UNAM TART array. Coordinates are in meters relative to the phase centre at $[0,0]$.}
 \label{tab:positions}
@@ -261,7 +257,7 @@ Antenna $i$ & Antenna $j$ & Residual (mm) \\
 
 When survey measurements contain outliers---erroneous distance readings from misaligned tape measures or transcription errors---ordinary least squares can be skewed by those bad measurements. To address this, the \texttt{tart-position-cal} package includes an Iteratively Reweighted Least Squares (IRLS) option, invoked with the \texttt{--irls} flag. IRLS solves a series of weighted least-squares problems, recomputing per-measurement weights after each iteration to down-weight outliers. Two weight functions are available: Tukey's bisquare (default), which zeros out clear outliers entirely, and Huber, which caps the influence of outliers with a saturating linear penalty.
 
-Applying IRLS with Tukey weights to the UNAM data reduced the inter-antenna residual statistics: median absolute deviation from 0.57~mm to 0.51~mm, standard deviation from 1.07~mm to 1.10~mm, 50th percentile from 0.57~mm to 0.51~mm, and 90th percentile from 1.53~mm to 1.50~mm. The outer loop converged in 10 iterations. Figure~\ref{fig:irls_residuals} shows the residual histogram for the IRLS calibration. Compared to the manual iterative re-measurement workflow, IRLS provides a fully automated path to a robust solution, though manual verification of flagged outlier pairs remains advisable for critical deployments.
+Applying IRLS with Tukey weights to the UNAM data reduced the inter-antenna residual statistics: median absolute deviation from 0.57~mm to 0.51~mm, standard deviation from 1.07~mm to 1.10~mm, 50th percentile from 0.57~mm to 0.51~mm, and 90th percentile from 1.53~mm to 1.50~mm. The outer loop converged in 10 iterations. Figure~\ref{fig:irls_residuals} shows the residual histogram for the IRLS calibration. Compared to the manual iterative re-measurement workflow, IRLS provides a more robust solution, though manual verification of flagged outlier pairs is still required, fewer measurement need to be redone.
 
 \begin{figure}
  \includegraphics[width=\linewidth]{fig/irls_residual_histogram.png}
@@ -280,7 +276,7 @@ The iterative nature of the method, with outlier flagging and re-measurement, ma
 
 \section{Future Work}
 
-The TART telescope operates in the L1 band at 1.575~GHz, which is shared with GNSS signals. The raw telescope data streams contain embedded GNSS satellite signals at known frequencies. Post-processing these signals via software-defined radio techniques could yield direct time-difference-of-arrival (TDOA) measurements between antenna pairs, providing an independent and fully automated means of estimating antenna positions. Since GNSS satellite ephemerides are precisely known, this approach could in principle determine absolute antenna positions without any manual surveying. The main challenge lies in the low signal-to-noise ratio of the GNSS signals in the TART's broad-beam antennas and the short baselines ($<$\,2~m), which produce TDOA values on the order of nanoseconds.
+The TART telescope operates in the L1 band at 1.575~GHz, which is shared with GNSS signals. The raw telescope data streams contain embedded GNSS satellite signals at known frequencies. Post-processing these signals via software-defined radio techniques could yield direct time-difference-of-arrival (TDOA) measurements between antenna pairs, providing an independent and fully automated means of estimating antenna positions. Since GNSS satellite ephemerides are precisely known, this approach could in principle determine absolute antenna positions without any manual surveying. This is an area of active research. The main challenge lies in the low signal-to-noise ratio of the GNSS signals in the TART's broad-beam antennas and the short baselines ($<$\,2~m), which produce TDOA values on the order of nanoseconds.
 
 \bibliographystyle{plainnat}
 \bibliography{position-cal}
