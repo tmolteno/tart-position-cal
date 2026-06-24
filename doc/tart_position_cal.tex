@@ -23,19 +23,16 @@
 \maketitle
 
 \begin{abstract}
-The Transient Array Radio Telescope is an open-source all-sky imaging radio telescope.  For interferometric imaging, the positions of antennas in the array must be known accurately. This paper presents the technique used to calibrate the antenna positions. The technique reports outliers that are then re-measured, and is repeated until the desired accuracy is achieved. It is robust, can be performed with simple equipment, and provides accuracy to within $\sim 0.01$ wavelengths, sufficient for interferometric imaging. To determine the global orientation of the array, a further step is required that uses geographical bearings. The results of the TART deployment at the University of Namibia are presented, demonstrating residual errors on the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}.
+	The Transient Array Radio Telescope is an open-source all-sky imaging radio telescope.  For interferometric imaging, the positions of antennas in the array must be known accurately. This paper presents the technique used to calibrate the antenna positions. The technique reports outliers that are then re-measured, and is repeated until the desired accuracy is achieved. It is robust, can be performed with simple equipment, and provides accuracy to within $\sim 0.01$ wavelengths, sufficient for interferometric imaging. To determine the global orientation of the array, a further step is required that uses geographical bearings. The results of the TART deployment at the University of Namibia are presented, demonstrating residual errors on the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}.
 \end{abstract}
 
 \section{Background and Introduction}
 
 The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and to date  TART telescopes have been deployed in Oceania, Africa, Europe, and Asia as a platform to detect radio transients and for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces attendees to radio astronomy, radio imaging, and interferometry, and at the same time assembles and installs a TART radio telescope. The antenna array contains 24 antennas which are typically arranged on five spiral arms, although the layout can vary. The position calibration process for the antenna array must determine the relative locations of the antennas to within $\approx 5$~mm.
 
-% TKTK in the coordinate system of the phase-centre of the antenna array. Talk about this 
-% when discussing radial measurements.
-
 \begin{figure}
- \includegraphics[width=\linewidth]{fig/botswana_calibration.png}
- \caption{Aerial view of a TART being calibrated by attendees at a TART workshop hosted at the Botswana International University of Science and Technology, in March 2025. The atendees are take measurement of the distance between pairs of antennas in order to accurately determine their location.}
+	\includegraphics[width=\linewidth]{fig/botswana_calibration.png}
+	\caption{Aerial view of a TART being calibrated by attendees at a TART workshop hosted at the Botswana International University of Science and Technology, in March 2025. The attendees are taking measurements of the distance between pairs of antennas in order to accurately determine their locations.}
 \end{figure}
 
 The calibration process must involve easy-to-make measurements, and be robust to accidental errors in measurement. This paper outlines an iterative calibration process that meets these requirements.
@@ -49,8 +46,9 @@ The calibration process involves measuring two kinds of distances: the \emph{rad
 As the distance measurements do not constrain the global rotation of the array, an additional constraint is required. It is assumed that the direction between the phase-centre and one of the antennas is known. This direction is the measured geographic bearing between one antenna and a distant landmark with known coordinates.
 
 \begin{figure*}
- \includegraphics[width=\linewidth]{fig/spreadsheet.png}
- \caption{Spreadsheet with the measurements from a TART antenna array. The highlighted entry shows the distance in mm, between antenna 17, and antenna 8.}
+	\includegraphics[width=\linewidth]{fig/spreadsheet.png}
+	\caption{Spreadsheet with the measurements from a TART antenna array. The highlighted entry shows the distance in mm, between antenna 17, and antenna 8.}
+	\label{fig:spreadsheet}
 \end{figure*}
 
 The purpose of the algorithm is to estimate the 24 antenna positions in the $x$--$y$ plane that are most consistent with the measurements.
@@ -60,27 +58,25 @@ The purpose of the algorithm is to estimate the 24 antenna positions in the $x$-
 
 The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase-centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase-centre must be measured independently.
 
-This is accomplished by identifying an antenna that has a radial vector that aligns with a distant, identifiable landmark visible on satellite imagery (e.g.\ Google Maps). The geographic coordinates (latitude and longitude) of both the phase-centre and the landmark are recorded. 
+This is accomplished by identifying an antenna that has a radial vector that aligns with a distant, identifiable landmark visible on satellite imagery (e.g.\ Google Maps). The geographic coordinates (latitude and longitude) of both the phase-centre and the landmark are recorded.
 
-From these two geographic coordinates, the expected bearing $\theta_k$ of the reference antenna $k$ is computed:
-This $\theta_k$ measurement is supplied to the least-squares procedure (as $L_\theta$ in Equation~4).
-described below. In the software described in~\ref{sec:software} $\theta_k$ is computed as an inverse geodesic problem implemented in the PROJ library~\cite{proj}.
+From these two geographic coordinates, the expected bearing $\theta_k$ of the reference antenna $k$ is computed.
+This $\theta_k$ measurement is supplied to the least-squares procedure as $L_\theta$ in Equation~4, described below. In the software described in~\ref{sec:software} $\theta_k$ is computed as an inverse geodesic problem implemented in the PROJ library~\cite{proj}.
 
 Given any set $\{x_i, y_i\}$ of 24 antenna positions we can simulate all the measurements, $\theta_k'$, $\delta_{ij}'$ and $\theta_k'$ that we would expect.
 \begin{align}
- r_i' &=  \sqrt{x_i^2 + y_i^2} \\
- \delta_{ij}' &= \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \\
- \theta_k' &= \arctan\!\left(\frac{x_k}{y_k}\right)
+	r_i'         & =  \sqrt{x_i^2 + y_i^2}                \\
+	\delta_{ij}' & = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \\
+	\theta_k'    & = \arctan2\!\left(x_k, y_k\right)
 \end{align}
 
 These simulated measurements will be close to the recorded measurements if the $\{x_i, y_i\}$ are close to the true values. The differences between the simulated measurements and the actual measurements are called {\em residuals}. The set of positions that minimizes the squared residuals $L(\{x_i, y_i\})$, is a good estimate of the true antenna positions $\{x_i, y_i\}$.
 \begin{align}
- L(x, y) &= L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y) \\
- L_r(x,y) &= \sum_{i=1}^{N} \left( r_i - r_i' \right)^2 \\
- L_{ij}(x,y) &= \sum_{i,j=1}^{N} \left( \delta_{ij} -  \delta_{ij}' \right)^2 \\
- L_\theta(x,y) &= \left( \theta_k - \theta_k' \right)^2
+	L(x, y)       & = L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y)                \\
+	L_r(x,y)      & = \sum_{i=1}^{N} \left( r_i - r_i' \right)^2                    \\
+	L_{ij}(x,y)   & = \sum_{i,j=1}^{N} \left( \delta_{ij} -  \delta_{ij}' \right)^2 \\
+	L_\theta(x,y) & = \left( \theta_k - \theta_k' \right)^2
 \end{align}
-Where 
 In practice, the angular residual term is also weighted by a factor of $\lambda$ relative to the pairwise term, reflecting the higher confidence in the radial measurements.
 
 \subsection{Algorithm}
@@ -97,14 +93,14 @@ tart-position-cal \
 \end{verbatim}
 
 \begin{figure*}
- \includegraphics[width=\linewidth]{fig/final_positions.png}
- \caption{Initial position estimates (blue) and the final calibrated positions (orange) for the TART antenna array. Antenna indices are labeled. This shows that the antenna, as constructed was assembled with the spiral arms clockwise oriented, in contrast to the initial position assumptions. }
+	\includegraphics[width=\linewidth]{fig/final_positions.png}
+	\caption{Initial position estimates (blue) and the final calibrated positions (orange) for the TART antenna array. Antenna indices are labeled. This shows that the antenna, as constructed was assembled with the spiral arms clockwise oriented, in contrast to the initial position assumptions. }
 \end{figure*}
 
 
 
 \begin{equation}
-\Delta\theta = -(\theta_k - \beta)
+	\Delta\theta = -(\theta_k - \beta)
 \end{equation}
 
 This rotation is applied to all antenna positions either as a constraint within the least-squares minimization (as $L_\theta$ in Equation~4), or as a post-optimization rotation of the calibrated positions.
@@ -115,47 +111,81 @@ The differences between the simulated measurements of the calibrated positions a
 
 
 \begin{figure}[ht]
-\centering
-\adjustbox{max width=0.9\linewidth}{%
-\begin{tikzpicture}[
-    node distance=6mm and 4mm,
-    box/.style={rectangle, draw, rounded corners=3pt, minimum width=32mm, minimum height=10mm, align=center, font=\small},
-    decision/.style={diamond, draw, aspect=1.5, minimum width=32mm, minimum height=10mm, align=center, inner sep=0pt},
-    arrow/.style={-{Stealth[scale=0.9]}, thick},
-]
+	\centering
+	\adjustbox{max width=0.9\linewidth}{%
+		\begin{tikzpicture}[
+				node distance=6mm and 4mm,
+				box/.style={rectangle, draw, rounded corners=3pt, minimum width=32mm, minimum height=10mm, align=center, font=\small},
+				decision/.style={diamond, draw, aspect=1.5, minimum width=32mm, minimum height=10mm, align=center, inner sep=0pt},
+				arrow/.style={-{Stealth[scale=0.9]}, thick},
+			]
 
-\node[box] (start)                    {Initial position\\estimates $\{x_i, y_i\}$};
-\node[box] (measure) [below=of start] {Take measurements\\$r_i$ (radial), $\delta_{ij}$ (pairwise)};
-\node[box] (optimize) [below=of measure] {Least-squares\\minimization of $L(x,y)$};
-\node[box] (residuals) [below=of optimize] {Compute residuals\\$\epsilon_i = r_i - r_i^s$,\\$\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$};
-\node[decision] (check) [below=of residuals] {Any $|\epsilon| > \tau$?};
-\node[box] (flag) [below=of check, xshift=-20mm] {Flag outliers \&\\re-measure pairs};
-\node[box] (done) [below=of check, xshift=20mm]  {Output calibrated\\antenna positions};
+			\node[box] (start)                    {Initial position\\estimates $\{x_i, y_i\}$};
+			\node[box] (measure) [below=of start] {Take measurements\\$r_i$ (radial), $\delta_{ij}$ (pairwise)};
+			\node[box] (optimize) [below=of measure] {Least-squares\\minimization of $L(x,y)$};
+			\node[box] (residuals) [below=of optimize] {Compute residuals\\$\epsilon_i = r_i - r_i^s$,\\$\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$};
+			\node[decision] (check) [below=of residuals] {Any $|\epsilon| > \tau$?};
+			\node[box] (flag) [below=of check, xshift=-20mm] {Flag outliers \&\\re-measure pairs};
+			\node[box] (done) [below=of check, xshift=20mm]  {Output calibrated\\antenna positions};
 
-\draw[arrow] (start)    -- (measure);
-\draw[arrow] (measure)  -- (optimize);
-\draw[arrow] (optimize) -- (residuals);
-\draw[arrow] (residuals) -- (check);
+			\draw[arrow] (start)    -- (measure);
+			\draw[arrow] (measure)  -- (optimize);
+			\draw[arrow] (optimize) -- (residuals);
+			\draw[arrow] (residuals) -- (check);
 
-\draw[arrow] (check) -| node[above, xshift=-7mm, font=\footnotesize] {yes} (flag);
-\draw[arrow] (check) -| node[above, xshift=7mm, font=\footnotesize]  {no}  (done);
+			\draw[arrow] (check) -| node[above, xshift=-7mm, font=\footnotesize] {yes} (flag);
+			\draw[arrow] (check) -| node[above, xshift=7mm, font=\footnotesize]  {no}  (done);
 
-\draw[arrow, overlay] (flag.west) -- ++(-5mm,0) |- (measure.west);
+			\draw[arrow] (flag.west) -- ++(-5mm,0) |- (measure.west);
 
-\end{tikzpicture}%
-}
-\caption{Flowchart of the iterative calibration process. Initial position estimates are refined by minimizing the squared residuals against measured radial and pairwise distances. Large residuals (exceeding threshold $\tau$) are flagged for re-measurement, and the optimization is repeated until all residuals are acceptable.}
-\label{fig:flowchart}
+		\end{tikzpicture}%
+	}
+	\caption{Flowchart of the iterative calibration process. Initial position estimates are refined by minimizing the squared residuals against measured radial and pairwise distances. Large residuals (exceeding threshold $\tau$) are flagged for re-measurement, and the optimization is repeated until all residuals are acceptable.}
+	\label{fig:flowchart}
 \end{figure}
 
 \begin{figure}
- \includegraphics[width=\linewidth]{fig/residual_histogram.png}
- \caption{Histogram of the pairwise distance residuals after calibration, showing that the calibrated positions closely match the measurements. The distribution is centered near zero with a narrow spread.}
+	\includegraphics[width=\linewidth]{fig/residual_histogram.png}
+	\caption{Histogram of the pairwise distance residuals after calibration, showing that the calibrated positions closely match the measurements. The distribution is centered near zero with a narrow spread.}
 \end{figure}
 
 
-\section{The tart-position-cal python package}
+\section{The \texttt{tart-position-cal} Python Package}
 \label{sec:software}
+
+The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}~\cite{moltento2026tartpositioncal}, available under the GPL-3.0 license. The package provides both a command-line interface (CLI) and a programmatic API, and is installable via \texttt{pip} from the Python Package Index.
+
+\subsection{Command-Line Interface}
+
+The CLI is invoked as \texttt{tart-position-cal} and accepts the following principal arguments:
+
+\begin{itemize}
+	\item \texttt{--measurements}: Path to an ODS spreadsheet (in the format shown in Figure~\ref{fig:spreadsheet}) containing the radial and pairwise distance measurements.
+	\item \texttt{--positions}: Path to a JSON file with initial antenna position estimates in metres, structured as \texttt{\{"antenna\_positions": [[x, y, z], \ldots]\}}.
+	\item \texttt{--api}: Alternatively, a TART telescope API base URL from which initial positions can be fetched directly (e.g.\ \texttt{https://api.elec.ac.nz/tart/na-unam}).
+	\item \texttt{--output}: Path for the calibrated antenna positions JSON output file.
+	\item \texttt{--rot-index} and \texttt{--rot-degrees}: Specify the reference antenna and its geographic bearing for the global rotation constraint.
+	\item \texttt{--irls}: Enable Iteratively Reweighted Least Squares for robust calibration (see \S\ref{sec:irls}).
+	\item \texttt{--max-iter}: Maximum number of optimizer iterations (default 500).
+	\item \texttt{--max-position-error}: Half-width of the search bounds around each initial coordinate (default 4200~mm).
+	\item \texttt{--no-plots}: Suppress generation of diagnostic plots.
+\end{itemize}
+
+The program outputs a JSON file compatible with the TART telescope API, together with three diagnostic plots: the initial and calibrated positions, the displacement vectors from initial to calibrated positions, and a histogram of the pairwise distance residuals.
+
+\subsection{Programmatic API}
+
+The core calibration logic resides in the \texttt{tart\_position\_cal.calibrate} module. The principal functions are:
+
+\begin{itemize}
+	\item \texttt{calibrate()}: Runs the standard least-squares optimization using the L-BFGS-B algorithm. Returns a SciPy \texttt{OptimizeResult} object.
+	\item \texttt{calibrate\_irls()}: Runs the IRLS variant (see \S\ref{sec:irls}) using Trust Region Reflective least squares as the inner solver.
+	\item \texttt{load\_measurements()}: Reads radial and pairwise distance measurements from an ODS spreadsheet via \texttt{pandas} and \texttt{odfpy}.
+	\item \texttt{load\_initial\_positions()} / \texttt{fetch\_initial\_positions()}: Obtain initial antenna position estimates from a JSON file or a TART API endpoint, respectively.
+	\item \texttt{result\_to\_json()}: Converts the optimizer output to the telescope's API-compatible JSON format.
+\end{itemize}
+
+Dependencies are restricted to widely available scientific Python libraries: NumPy~\cite{numpy}, SciPy~\cite{scipy}, pandas~\cite{pandas}, Matplotlib~\cite{matplotlib}, and Requests. The package is tested with Python 3.11 and later.
 
 \section{Results: UNAM Deployment}
 
@@ -174,45 +204,45 @@ The global orientation was determined using antenna~3 (index 3 in the array numb
 The L-BFGS-B optimizer converged after 117 iterations, reducing the cost function from $6.5 \times 10^7$ to $7.66 \times 10^2$. The calibrated antenna positions are given in Table~\ref{tab:positions}. Figure~\ref{fig:unam_differences} shows the displacement of each antenna from its initial position estimate.
 
 \begin{figure}
- \includegraphics[width=\linewidth]{fig/differences.png}
- \caption{Differences between the initial and final antenna positions for the UNAM array. The vectors show the displacement of each antenna from its nominal position. Antenna indices are labeled.}
- \label{fig:unam_differences}
+	\includegraphics[width=\linewidth]{fig/differences.png}
+	\caption{Differences between the initial and final antenna positions for the UNAM array. The vectors show the displacement of each antenna from its nominal position. Antenna indices are labeled.}
+	\label{fig:unam_differences}
 \end{figure}
 
 \begin{table}[ht]
-\centering
-\caption{Calibrated antenna positions for the UNAM TART array. Coordinates are in meters relative to the phase centre at $[0,0]$.}
-\label{tab:positions}
-\begin{tabular}{|rrr|}
-\hline
-Antenna & $x$ (m) & $y$ (m) \\
-\hline
- 0 & $-0.054$ &  $0.341$ \\
- 1 & $-0.025$ &  $0.841$ \\
- 2 &  $0.181$ &  $1.202$ \\
- 3 &  $0.461$ &  $1.409$ \\
- 4 &  $0.796$ &  $1.510$ \\
- 5 &  $0.304$ &  $0.164$ \\
- 6 &  $0.790$ &  $0.292$ \\
- 7 &  $1.195$ &  $0.207$ \\
- 8 &  $1.476$ &  $0.002$ \\
- 9 &  $1.674$ & $-0.287$ \\
-10 &  $0.248$ & $-0.231$ \\
-11 &  $0.517$ & $-0.654$ \\
-12 &  $0.562$ & $-1.066$ \\
-13 &  $0.456$ & $-1.398$ \\
-14 &  $0.246$ & $-1.679$ \\
-15 & $-0.144$ & $-0.299$ \\
-16 & $-0.465$ & $-0.685$ \\
-17 & $-0.845$ & $-0.853$ \\
-18 & $-1.194$ & $-0.851$ \\
-19 & $-1.523$ & $-0.733$ \\
-20 & $-0.797$ &  $0.241$ \\
-21 & $-1.074$ &  $0.550$ \\
-22 & $-1.182$ &  $0.882$ \\
-23 & $-1.173$ &  $1.232$ \\
-\hline
-\end{tabular}
+	\centering
+	\caption{Calibrated antenna positions for the UNAM TART array. Coordinates are in meters relative to the phase centre at $[0,0]$.}
+	\label{tab:positions}
+	\begin{tabular}{|rrr|}
+		\hline
+		Antenna & $x$ (m)  & $y$ (m)  \\
+		\hline
+		0       & $-0.054$ & $0.341$  \\
+		1       & $-0.025$ & $0.841$  \\
+		2       & $0.181$  & $1.202$  \\
+		3       & $0.461$  & $1.409$  \\
+		4       & $0.796$  & $1.510$  \\
+		5       & $0.304$  & $0.164$  \\
+		6       & $0.790$  & $0.292$  \\
+		7       & $1.195$  & $0.207$  \\
+		8       & $1.476$  & $0.002$  \\
+		9       & $1.674$  & $-0.287$ \\
+		10      & $0.248$  & $-0.231$ \\
+		11      & $0.517$  & $-0.654$ \\
+		12      & $0.562$  & $-1.066$ \\
+		13      & $0.456$  & $-1.398$ \\
+		14      & $0.246$  & $-1.679$ \\
+		15      & $-0.144$ & $-0.299$ \\
+		16      & $-0.465$ & $-0.685$ \\
+		17      & $-0.845$ & $-0.853$ \\
+		18      & $-1.194$ & $-0.851$ \\
+		19      & $-1.523$ & $-0.733$ \\
+		20      & $-0.797$ & $0.241$  \\
+		21      & $-1.074$ & $0.550$  \\
+		22      & $-1.182$ & $0.882$  \\
+		23      & $-1.173$ & $1.232$  \\
+		\hline
+	\end{tabular}
 \end{table}
 
 \subsection{Residual Analysis}
@@ -220,49 +250,50 @@ Antenna & $x$ (m) & $y$ (m) \\
 The residuals of the pairwise distance measurements after calibration are shown in Figure~\ref{fig:unam_residuals}. The inter-antenna residual statistics are: median absolute deviation 0.57~mm, standard deviation 1.07~mm, 50th percentile of absolute residuals 0.57~mm, and 90th percentile 1.53~mm. These indicate that the calibrated positions reproduce the measured distances with sub-millimeter accuracy for the majority of antenna pairs. The largest residuals, listed in Table~\ref{tab:large_residuals}, range up to 5.0~mm and are concentrated in a small number of antenna pairs. These outliers typically indicate measurement errors in the original survey data and would be re-measured in a subsequent iteration of the calibration process.
 
 \begin{figure}
- \includegraphics[width=\linewidth]{fig/residual_histogram.png}
- \caption{Histogram of pairwise distance residuals for the UNAM calibration. The 90th percentile is 1.53~mm. The distribution is symmetric around zero with a standard deviation of approximately 1~mm.}
- \label{fig:unam_residuals}
+	\includegraphics[width=\linewidth]{fig/residual_histogram.png}
+	\caption{Histogram of pairwise distance residuals for the UNAM calibration. The 90th percentile is 1.53~mm. The distribution is symmetric around zero with a standard deviation of approximately 1~mm.}
+	\label{fig:unam_residuals}
 \end{figure}
 
 
 \begin{table}[h]
-\centering
-\caption{Largest residuals (exceeding the 90th percentile of 1.53~mm) from the UNAM calibration. Negative residuals indicate that the measured distance was smaller than the calibrated distance.}
-\label{tab:large_residuals}
-\begin{tabular}{rrr}
-\hline
-Antenna $i$ & Antenna $j$ & Residual (mm) \\
-\hline
-19 & 9  & 5.0 \\
-17 & 16 & 4.4 \\
- 9 & 2  & 4.2 \\
-17 & 4  & 3.6 \\
-22 & 12 & 3.3 \\
-14 & 1  & $-3.2$ \\
-17 & 8  & $-2.8$ \\
-19 & 4  & $-2.8$ \\
-22 & 9  & $-2.3$ \\
- 5 & 2  & $-2.2$ \\
-14 & 4  & $-2.2$ \\
-12 & 3  & $-2.1$ \\
-12 & 0  & $-2.0$ \\
-14 & 0  & $-2.0$ \\
-17 & 9  & $-2.0$ \\
-\hline
-\end{tabular}
+	\centering
+	\caption{Largest residuals (exceeding the 90th percentile of 1.53~mm) from the UNAM calibration. Negative residuals indicate that the measured distance was smaller than the calibrated distance.}
+	\label{tab:large_residuals}
+	\begin{tabular}{rrr}
+		\hline
+		Antenna $i$ & Antenna $j$ & Residual (mm) \\
+		\hline
+		19          & 9           & 5.0           \\
+		17          & 16          & 4.4           \\
+		9           & 2           & 4.2           \\
+		17          & 4           & 3.6           \\
+		22          & 12          & 3.3           \\
+		14          & 1           & $-3.2$        \\
+		17          & 8           & $-2.8$        \\
+		19          & 4           & $-2.8$        \\
+		22          & 9           & $-2.3$        \\
+		5           & 2           & $-2.2$        \\
+		14          & 4           & $-2.2$        \\
+		12          & 3           & $-2.1$        \\
+		12          & 0           & $-2.0$        \\
+		14          & 0           & $-2.0$        \\
+		17          & 9           & $-2.0$        \\
+		\hline
+	\end{tabular}
 \end{table}
 
 \subsection{Iteratively Reweighted Least Squares}
+\label{sec:irls}
 
 When survey measurements contain outliers---erroneous distance readings from misaligned tape measures or transcription errors---ordinary least squares can be skewed by those bad measurements. To address this, the \texttt{tart-position-cal} package includes an Iteratively Reweighted Least Squares (IRLS) option, invoked with the \texttt{--irls} flag. IRLS solves a series of weighted least-squares problems, recomputing per-measurement weights after each iteration to down-weight outliers. Two weight functions are available: Tukey's bisquare (default), which zeros out clear outliers entirely, and Huber, which caps the influence of outliers with a saturating linear penalty.
 
-Applying IRLS with Tukey weights to the UNAM data reduced the inter-antenna residual statistics: median absolute deviation from 0.57~mm to 0.51~mm, standard deviation from 1.07~mm to 1.10~mm, 50th percentile from 0.57~mm to 0.51~mm, and 90th percentile from 1.53~mm to 1.50~mm. The outer loop converged in 10 iterations. Figure~\ref{fig:irls_residuals} shows the residual histogram for the IRLS calibration. Compared to the manual iterative re-measurement workflow, IRLS provides a more robust solution, though manual verification of flagged outlier pairs is still required, fewer measurement need to be redone.
+Applying IRLS with Tukey weights to the UNAM data reduced the inter-antenna residual statistics: median absolute deviation from 0.57~mm to 0.51~mm, standard deviation from 1.07~mm to 1.10~mm, 50th percentile from 0.57~mm to 0.51~mm, and 90th percentile from 1.53~mm to 1.50~mm. The outer loop converged in 10 iterations. Figure~\ref{fig:irls_residuals} shows the residual histogram for the IRLS calibration. Compared to the manual iterative re-measurement workflow, IRLS provides a more robust solution, though manual verification of flagged outlier pairs is still required, fewer measurements need to be redone.
 
 \begin{figure}
- \includegraphics[width=\linewidth]{fig/irls_residual_histogram.png}
- \caption{Histogram of pairwise distance residuals for the UNAM calibration using IRLS with Tukey weights. The 90th percentile is 1.50~mm.}
- \label{fig:irls_residuals}
+	\includegraphics[width=\linewidth]{fig/irls_residual_histogram.png}
+	\caption{Histogram of pairwise distance residuals for the UNAM calibration using IRLS with Tukey weights. The 90th percentile is 1.50~mm.}
+	\label{fig:irls_residuals}
 \end{figure}
 
 
