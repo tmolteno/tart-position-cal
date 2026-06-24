@@ -12,21 +12,25 @@
 
 %opening
 \title{Antenna Array Position Calibration for the Transient Array Radio Telescope}
-\author[1]{Timothy C.A. Molteno, \orcidlink{0000-0002-2022-0380}}
+\author[1,2,*]{Timothy C.A. Molteno, \orcidlink{0000-0002-2022-0380}}
 \affil[1]{Department of Physics, University of Otago, Box 56, Dunedin, New Zealand}
-\affil[1]{Department of Physics \& Electronics, Rhodes University, Makhanda, South Africa}
+\affil[2]{Department of Physics \& Electronics, Rhodes University, Makhanda, South Africa}
+\affil[*]{Corresponding Author: tim@elec.ac.nz}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-The Transient Array Radio Telescope (TART) is an all-sky radio telescope designed to detect transient events. The antenna array contains 24 elements arranged on five spiral arms. For interferometric imaging, the positions of these antennas must be accurately known. This paper presents the technique used to calibrate the antenna positions. The technique is iterative, based on a least-squares minimization that reports outliers which are then re-measured. A method for determining the global orientation of the array using geographical bearings is also presented. This technique is robust, can be performed with simple equipment, and provides accuracy to within 0.01 wavelengths---sufficient for interferometric imaging. Results from the TART deployment at the University of Namibia (UNAM) are presented, demonstrating residual errors at the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}~\cite{moltento2026tartpositioncal}.
+The Transient Array Radio Telescope is an open-source all-sky imaging radio telescope.  For interferometric imaging, the positions of antennas in the array must be known accurately. This paper presents the technique used to calibrate the antenna positions. The technique reports outliers that are then re-measured, and is repeated until the desired accuracy is achieved. It is robust, can be performed with simple equipment, and provides accuracy to within $\sim 0.01$ wavelengths, sufficient for interferometric imaging. To determine the global orientation of the array, a further step is required that uses geographical bearings. The results of the TART deployment at the University of Namibia are presented, demonstrating residual errors on the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}.
 \end{abstract}
 
 \section{Background and Introduction}
 
-The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and has been deployed widely as a tool to detect radio transients, and also as a platform for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces the attendees to radio astronomy, radio imaging, and interferometry, and at the same time, assembles and installs a TART radio telescope. The position calibration process for the antenna array must determine the relative locations of the antennas to within $\approx 5$~mm in the coordinate system of the phase center of the antenna array.
+The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and to date  TART telescopes have been deployed in Oceania, Africa, Europe, and Asia as a platform to detect radio transients and for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces attendees to radio astronomy, radio imaging, and interferometry, and at the same time assembles and installs a TART radio telescope. The antenna array contains 24 antennas which are typically arranged on five spiral arms, although the layout can vary. The position calibration process for the antenna array must determine the relative locations of the antennas to within $\approx 5$~mm.
+
+% TKTK in the coordinate system of the phase-centre of the antenna array. Talk about this 
+% when discussing radial measurements.
 
 \begin{figure}
  \includegraphics[width=\linewidth]{fig/botswana_calibration.png}
@@ -37,9 +41,11 @@ The calibration process must involve easy-to-make measurements, and be robust to
 
 \section{Method}
 
-The process involves measuring two kinds of distances. The first are the \emph{radial distances} between the phase-centre and the centre of each antenna. There are $N$ radial distance measurements $r_i$, where $N=24$ is the number of antennas in the array. The second measurements are the pairwise distances between each pair of antennas. There are $\frac{1}{2} N (N-1)$ unique pairs of antennas for an array with $N$ antennas. For the TART there are 276 pairwise distances $\delta_{ij}$ between antennas $i$ and $j$.
+In an interferometric array, an arbitrary point is chosen as the {\em phase-centre} of the array. This phase-centre is the (0,0) point for the antenna coordinate frame. The purpose of this calibration is to estimate accurately the positions of each antenna with respect to this phase centre.
 
-As the distance measurements do not constrain the global rotation of the array, an additional constraint is required. It is assumed that the direction between the phase centre and one of the antennas is known. This direction is the measured geographic bearing between one antenna and a distant landmark with known coordinates.
+The calibration process involves measuring two kinds of distances: the \emph{radial distances} between the phase-centre and the centre of each antenna, and the {\em pairwise distances} between all antennas. There are $N$ measurements of radial distance $r_i$, and there are $\frac{1}{2} N (N-1)$ pairwise distances, where $N$ is the number of antennas in the array. For the TART ($N=24$) there are 276 pairwise distances.
+
+As the distance measurements do not constrain the global rotation of the array, an additional constraint is required. It is assumed that the direction between the phase-centre and one of the antennas is known. This direction is the measured geographic bearing between one antenna and a distant landmark with known coordinates.
 
 \begin{figure*}
  \includegraphics[width=\linewidth]{fig/spreadsheet.png}
