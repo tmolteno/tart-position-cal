@@ -126,40 +126,79 @@ different arms and are far from collinear with antenna 3).
 ### Determining the true chirality
 
 Choosing *which* antenna to use as $c$ is a separate question from
-knowing *what sign it should produce*. The sign that matters is the
-sign of the **actual, as-built** array — not whatever the nominal
-design/initial-guess file says.
+knowing *what sign it should produce*.  The sign must come from the
+**actual, as-built** array — not from the design file, not from the
+initial guess, and not from the distance measurements (which are
+identical for the true array and its mirror image).
 
-The distance measurements cannot tell you this: $r_i$ and $\delta_{ij}$
-are exactly the same for the true array and its mirror image, and the
-bearing constraint only pins down rotation, not reflection (see
-"Symmetries of the distance data" above). So the true handedness has to
-come from an **independent observation of the physical array**, for
-example:
+The `--chirality-sign` flag takes two values:
 
-- Standing at the phase centre, facing the reference antenna $k$, and
-  noting by eye whether antenna $c$ is physically to your left or your
-  right.
-- A site photo or sketch taken during installation that records which
-  way the spiral arms actually wind, compared against the winding
-  direction implied by the design file.
+| Observed position of $c$ relative to the\quad reference bearing line | `--chirality-sign` |
+|-----------------------------------------------------------------------|---------------------|
+| $c$ is to the **left**                        | `positive`          |
+| $c$ is to the **right**                       | `negative`          |
 
-Once you know the true sign, pass it directly to the software via
-`--chirality-sign`:
+#### Step-by-step field procedure
 
-- If antenna $c$ is to the **left** of the reference bearing line (as seen
-  standing at the phase centre facing $k$), use `--chirality-sign positive`.
-- If antenna $c$ is to the **right**, use `--chirality-sign negative`.
+1. **Stand at the phase centre.**  This is the physical point on the
+   ground from which all radial measurements were taken.
 
-The software will enforce exactly that sign regardless of what the
-`initial_guess` file says.  You do **not** need to mirror or otherwise
-manipulate the input file — the sign you specify is the sign the
-optimiser respects.
+2. **Face the reference antenna $k$** (the one you are passing to
+   `--rot-index`).  Extend an imaginary line from the phase centre,
+   through the reference antenna, and onward — this is the **reference
+   bearing line**.
 
-If the design file agrees with reality, the chirality constraint adds
-zero cost; if the design file disagrees, the constraint actively
-steers the optimiser away from the (wrong) initial-guess chirality
-toward the (correct) as-built chirality.
+3. **Look toward the chirality antenna $c$** (the one passed to
+   `--chirality-index`).  It should be clearly to one side of the
+   reference bearing line, not sitting on or near it.
+
+4. **Decide: left or right?**
+   - If $c$ is to your **left** as you stand facing $k$ →
+     `--chirality-sign positive`.
+   - If $c$ is to your **right** →
+     `--chirality-sign negative`.
+
+#### Verifying the sign (optional, after calibration)
+
+Once the software has produced calibrated positions, you can
+mathematically confirm the sign by computing the cross product:
+
+\[
+C = x_k \, y_c - y_k \, x_c
+\]
+
+- If $C > 0$, the chirality is **positive**.
+- If $C < 0$, the chirality is **negative**.
+
+This should agree with the left/right observation you made on site.
+
+#### Worked example: UNAM (Namibia)
+
+The UNAM array has:
+- Reference antenna $k = 3$ at bearing $18.11^\circ$ (east of north).
+- Chirality antenna $c = 10$.
+
+Standing at the phase centre and facing antenna 3 (roughly
+north‑north‑east), antenna 10 is clearly to the **right** — it sits
+on a spiral arm that winds clockwise from the reference bearing.
+Therefore the correct flag is `--chirality-sign negative`.
+
+Inspecting the calibrated positions:
+
+\[
+\begin{aligned}
+\mathbf{p}_3 &= (0.461,\, 1.409)\;\text{m}, \\
+\mathbf{p}_{10} &= (0.248,\, -0.231)\;\text{m}, \\
+C &= 0.461 \times (-0.231) - 1.409 \times 0.248 \approx -0.456.
+\end{aligned}
+\]
+
+The negative sign confirms the on‑site observation.
+
+Running with the correct sign gives a clean calibration
+($L \approx 435$); running with the opposite sign forces the optimiser
+into an impossible handedness and produces a large cost
+($L \approx 5\times10^5$), immediately flagging the mistake.
 
 ### Intuition: picking it without doing any maths
 

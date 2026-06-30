@@ -54,7 +54,8 @@ tart-position-cal \
 | `--output` | Path for output calibrated positions JSON (required) |
 | `--rot-index` | Antenna index for global rotation constraint (default: 0) |
 | `--rot-degrees` | Target geographic angle in degrees for constrained antenna (default: 0) |
-| `--chirality-index` | Antenna index to break reflection (chirality) degeneracy. Requires `--rot-index`. |
+| `--chirality-index` | Antenna index to break reflection (chirality) degeneracy. Requires `--rot-index` and `--chirality-sign`. |
+| `--chirality-sign` | Chirality handedness: `positive` or `negative`. Required with `--chirality-index`. See [Determining the chirality sign](#determining-the-chirality-sign). |
 | `--max-iter` | Maximum optimizer iterations (default: 500) |
 | `--max-position-error` | Search bound half-width in mm (default: 4200) |
 | `--no-plots` | Skip diagnostic plot generation |
@@ -63,6 +64,31 @@ tart-position-cal \
 | `--irls-weight-fn` | Weight function for IRLS: `tukey` (bisquare) or `huber` (default: `tukey`) |
 | `--irls-max-iter` | Maximum IRLS outer iterations (default: 10) |
 | `--title` | Optional prefix prepended to all output file names (e.g. `na-unam`) |
+
+### Determining the chirality sign
+
+The `--chirality-sign` flag tells the software which handedness (left or
+right) the as-built array actually has.  It takes one of two values:
+`positive` or `negative`.
+
+To determine the correct sign for your site:
+
+1. Stand at the phase centre.
+2. Face the reference antenna (the one passed to `--rot-index`).
+   Visually extend an imaginary line through it — this is the
+   **reference bearing line**.
+3. Look toward the chirality antenna (`--chirality-index`).
+4. **If it is to your left**, use `--chirality-sign positive`.
+   **If it is to your right**, use `--chirality-sign negative`.
+
+As a cross-check, after calibration you can verify the sign
+mathematically: compute the cross product
+$x_k \, y_c - y_k \, x_c$ from the calibrated positions — a positive
+value corresponds to `positive`, a negative to `negative`.
+
+See [`doc/SYMMETRY.md`](doc/SYMMETRY.md) for a detailed explanation of
+why this constraint is necessary and a worked example from the UNAM
+deployment.
 
 ### Input format
 
