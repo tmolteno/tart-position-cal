@@ -30,13 +30,13 @@
 
 %%  TKTK. This does not mention global orientation
 
-The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and to date  TART telescopes have been deployed in Oceania, Africa, Europe, and Asia as a platform to detect radio transients and for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces attendees to radio astronomy, radio imaging, and interferometry, and at the same time assembles and installs a TART radio telescope. 
+The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and to date  TART telescopes have been deployed in Oceania, Africa, Europe, and Asia as a platform to detect radio transients and for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces attendees to radio astronomy, radio imaging, and interferometry, and at the same time assembles and installs a TART radio telescope.
 
-The TART antenna array contains 24 antennas that are typically arranged on five spiral arms, although the layout can vary. For interferometric imaging~\cite{thomsonmoranswenson}, 
+The TART antenna array contains 24 antennas that are typically arranged on five spiral arms, although the layout can vary. For interferometric imaging~\cite{thomsonmoranswenson},
 
 In an interferometric array, an arbitrary point is chosen as the {\em phase-centre} of the array. This phase-centre is the (0,0) point for the antenna coordinate frame. The purpose of this calibration is to accurately estimate the East-North-Up (ENU) coordinates of each antenna with the phase center at the origin.
 
-The position calibration process for the antenna array must determine the co-ordinates of the antennas to within $\approx 5$~mm. The calibration process must involve easy-to-make measurements and be robust to accidental errors in measurement. This paper outlines an iterative calibration process that meets these requirements. 
+The position calibration process for the antenna array must determine the co-ordinates of the antennas to within $\approx 5$~mm. The calibration process must involve easy-to-make measurements and be robust to accidental errors in measurement. This paper outlines an iterative calibration process that meets these requirements.
 
 \begin{figure}
 	\includegraphics[width=\linewidth]{fig/botswana_calibration.png}
@@ -62,7 +62,7 @@ The purpose of the algorithm is to estimate the 24 antenna positions in the $x$-
 
 \subsection{Global Orientation Measurement}
 
-The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase-centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase-centre must be measured independently. %TKTK rework paragraph boundaries in this section
+The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase-centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase-centre must be measured independently.
 
 This is accomplished by identifying an antenna that has a radial vector that aligns with a distant identifiable landmark visible on satellite imagery (e.g. Google Maps). The geographic coordinates (latitude and longitude) of both the phase-centre and the landmark are recorded, and from these two geographic coordinates, the expected bearing $\theta_k$ of the reference antenna $k$ is computed as an inverse geodesic problem . The tart-position-cal package described in Section~\ref{sec:software}, provides a function to do this.
 
@@ -73,24 +73,24 @@ The global orientation estimate is refined as part of the continuous interferome
 
 \subsection{Least-Squares Estimator}
 
-Given any set $\{x_i, y_i\}$ of 24 antenna positions, we can simulate all the measurements $\theta_k'$, $\delta_{ij}'$ and $\theta_k'$, i.e.,
+Given any set $\{x_i, y_i\}$ of 24 antenna positions, we can simulate all the measurements $r_i^s$, $\delta_{ij}^s$ and $\theta_k^s$, i.e.,
 \begin{align*}
 	r^s_i         & =  \sqrt{x_i^2 + y_i^2}                \\
 	\delta^s_{ij} & = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \\
 	\theta^s_k    & = \arctan2\!\left(x_k, y_k\right).
 \end{align*}
-These simulated measurements will be close to the recorded measurements if the $\{x_i, y_i\}$ are close to the true values. 
+These simulated measurements will be close to the recorded measurements if the $\{x_i, y_i\}$ are close to the true values.
 
 The differences between the simulated measurements and the actual measurements are called {\em residuals}. The set of positions that minimizes the squared residuals $L(\{x_i, y_i\})$, is a good estimate of the true antenna positions $\{x_i, y_i\}$. We form least-squares estimators from the sum of the radius, difference, and $\theta$ residuals squared:
 \begin{align*}
-    L_r(\{x_i, y_i\})      & = \sum_{i=1}^{N} \left( r_i - r^s_i \right)^2                  \\
-	L_{ij}(\{x_i, y_i\})   & = \sum_{i,j=1}^{N} \left( \delt^sa_ -  \delta^s_{ij} \right)^2 \\
-	L_\theta(\{x_i, y_i\}) & = \left( L_\theta(\{x_i, y_i\})\theta_k - \theta^s_k \right)^2.
+	L_r(\{x_i, y_i\})      & = \sum_{i=1}^{N} \left( r_i - r^s_i \right)^2                    \\
+	L_{ij}(\{x_i, y_i\})   & = \sum_{i,j=1}^{N} \left( \delta_{ij} -  \delta^s_{ij} \right)^2 \\
+	L_\theta(\{x_i, y_i\}) & = \left( \theta_k - \theta^s_k \right)^2.
 \end{align*}
 
 As we wish to minimize each of these estimators, we form a combined estimator $L(\{x_i, y_i\})$ from the weighted sum of these other estimators:
 \begin{align}
-	L(\{x_i, y_i\})       & = L_r(\{x_i, y_i\}) + L_{ij}(\{x_i, y_i\}) + \lambda L_\theta(\{x_i, y_i\})
+	L(\{x_i, y_i\}) & = L_r(\{x_i, y_i\}) + L_{ij}(\{x_i, y_i\}) + \lambda L_\theta(\{x_i, y_i\})
 \end{align}
 The angular residual $L_\theta$, is weighted by a factor of $\lambda \sim 100$ relative to the other term, reflecting the desire to constrain the rotation of the array to achieve the desired global orientation.
 
