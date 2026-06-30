@@ -47,6 +47,15 @@
 
 ### Changed
 
+- `doc/tart_position_cal.tex` synced to the 0.2.0 algorithm: the paper now
+  describes the trust-region reflective solver (not L-BFGS-B), and the
+  objective (Eq.~2) shows the radius weight $w_r$, the unique-pair sum
+  ($\sum_{i<j}$, 276 for $N=24$), and the chirality term $L_\chi$.  All
+  UNAM results (\S4) were regenerated from the current code: final objective
+  $4.35\times10^2$ (20 iterations), residual MAD/std/p50/p90 of
+  0.63/1.11/0.59/1.65~mm, the IRLS comparison (0.49/1.11/0.49/1.44~mm in 4
+  iterations, with the unweighted objective rising to $5.40\times10^2$), and
+  the largest-residuals table.
 - Lint cleanup: `ruff check .` now passes cleanly. Removed an unused
   `import math`, consolidated three scattered `from tart_position_cal...`
   imports in the test module into one top-level import (fixing E402), and
