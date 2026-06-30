@@ -30,6 +30,7 @@ dependencies = [
     "odfpy>=1.4.0",
     "matplotlib>=3.7.0",
     "requests>=2.28.0",
+    "pyproj>=3.0.0",
 ]
 
 [project.scripts]

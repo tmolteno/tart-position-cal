@@ -96,7 +96,17 @@ The angular residual $L_\theta$, is weighted by a factor of $\lambda \sim 100$ r
 
 \subsection{Algorithm}
 
-The algorithm starts with a set of \emph{initial estimates} of $x_i, y_i$, the coordinates of the $i$th antenna. These are obtained from the telescope's nominal design positions, queried from the telescope API or loaded from a JSON configuration file. From these, the simulated measurements $r^s_i = \sqrt{x_i^2 + y_i^2}$, and $\delta^s_{ij} = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$ are calculated. The least squares estimator $L(x,y)$ is then minimized (as a function of $x_i, y_i$) using the L-BFGS-B algorithm as implemented in the SciPy library~\cite{scipy}, to find the set of antenna positions that produce simulated measurements as close as possible to the actual measurements. The algorithm is implemented in the open-source Python package \texttt{tart-position-cal}~\cite{moltento2026tartpositioncal} and is invoked as:
+The algorithm starts with a set of \emph{initial estimates} of $x_i, y_i$, the coordinates of the $i$th antenna. These are obtained from the telescope's nominal design positions, queried from the telescope API or loaded from a JSON configuration file. From these, the simulated measurements $r^s_i = \sqrt{x_i^2 + y_i^2}$, and $\delta^s_{ij} = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$ are calculated. The least squares estimator $L(x,y)$ is then minimized (as a function of $x_i, y_i$) using the L-BFGS-B algorithm as implemented in the SciPy library~\cite{scipy}, to find the set of antenna positions that produce simulated measurements as close as possible to the actual measurements. The algorithm is implemented in the open-source Python package \texttt{tart-position-cal}~\cite{moltento2026tartpositioncal}.  The geographic bearing of the reference antenna is obtained from the \texttt{compute\_bearing()} function, which solves the inverse geodesic problem on the WGS84 ellipsoid:
+
+\begin{verbatim}
+from tart_position_cal import compute_bearing
+# UNAM phase-centre to distant hill
+bearing = compute_bearing(-22.612053, 17.056784,
+                          -22.553822, 17.077290)
+# bearing = 18.1125...
+\end{verbatim}
+
+The full calibration is then invoked as:
 
 \begin{verbatim}
 tart-position-cal \
@@ -104,7 +114,8 @@ tart-position-cal \
     --positions antenna_positions.json \
     --output calibrated_antenna_positions.json \
     --rot-index 3 \
-    --rot-degrees 18.1125
+    --rot-degrees 18.1125 \
+    --chirality-index 10
 \end{verbatim}
 
 This results in a list of residuals.
@@ -160,6 +171,7 @@ If one or more of the residuals are large, it usually indicates that the associa
 
 
 \subsection{Symmetries and Global Frame Determination}
+\label{sec:symmetries}
 
 The distance measurements $r_i$ and $\delta_{ij}$ alone do not fully determine the antenna positions. The problem possesses three symmetries that must each be resolved by an additional constraint:
 
@@ -188,10 +200,15 @@ The CLI is invoked as \texttt{tart-position-cal} and accepts the following princ
 	\item \texttt{--api}: Alternatively, a TART telescope API base URL from which initial positions can be fetched directly (e.g.\ \texttt{https://api.elec.ac.nz/tart/na-unam}).
 	\item \texttt{--output}: Path for the calibrated antenna positions JSON output file.
 	\item \texttt{--rot-index} and \texttt{--rot-degrees}: Specify the reference antenna and its geographic bearing for the global rotation constraint.
+	\item \texttt{--chirality-index}: Antenna index used to break the reflection (chirality) degeneracy.  The sign of $\mathbf{p}_k \times \mathbf{p}_c$ from the initial positions is enforced as a soft constraint (see \S\ref{sec:symmetries}).  Requires \texttt{--rot-index}.
 	\item \texttt{--irls}: Enable Iteratively Reweighted Least Squares for robust calibration (see \S\ref{sec:irls}).
+	\item \texttt{--irls-weight-fn}: Weight function for IRLS: \texttt{tukey} (Tukey's bisquare, default) or \texttt{huber}.
+	\item \texttt{--irls-max-iter}: Maximum IRLS outer iterations (default 10).
 	\item \texttt{--max-iter}: Maximum number of optimizer iterations (default 500).
 	\item \texttt{--max-position-error}: Half-width of the search bounds around each initial coordinate (default 4200~mm).
 	\item \texttt{--no-plots}: Suppress generation of diagnostic plots.
+	\item \texttt{--plot-dir}: Directory for diagnostic plots (default: current directory).
+	\item \texttt{--title}: Optional prefix prepended to all output file names (e.g.\ \texttt{na-unam}).
 \end{itemize}
 
 The program outputs a JSON file compatible with the TART telescope API, together with three diagnostic plots: the initial and calibrated positions, the displacement vectors from initial to calibrated positions, and a histogram of the pairwise distance residuals.
@@ -206,9 +223,10 @@ The core calibration logic resides in the \texttt{tart\_position\_cal.calibrate}
 	\item \texttt{load\_measurements()}: Reads radial and pairwise distance measurements from an ODS spreadsheet via \texttt{pandas} and \texttt{odfpy}.
 	\item \texttt{load\_initial\_positions()} / \texttt{fetch\_initial\_positions()}: Obtain initial antenna position estimates from a JSON file or a TART API endpoint, respectively.
 	\item \texttt{result\_to\_json()}: Converts the optimizer output to the telescope's API-compatible JSON format.
+	\item \texttt{compute\_bearing()}: Computes the geographic bearing (degrees east of north) from the phase-centre to a distant landmark by solving the inverse geodesic problem on the WGS84 ellipsoid via the PROJ library~\cite{proj}. This is the value to pass to \texttt{--rot-degrees}.
 \end{itemize}
 
-Dependencies are restricted to widely available scientific Python libraries: NumPy~\cite{numpy}, SciPy~\cite{scipy}, pandas~\cite{pandas}, Matplotlib~\cite{matplotlib}, and Requests. The package is tested with Python 3.11 and later.
+Dependencies are restricted to widely available scientific Python libraries: NumPy~\cite{numpy}, SciPy~\cite{scipy}, pandas~\cite{pandas}, Matplotlib~\cite{matplotlib}, Requests, and PROJ (pyproj)~\cite{proj}. The package is tested with Python 3.11 and later.
 
 \section{Results: UNAM Deployment}
 

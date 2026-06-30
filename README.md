@@ -17,13 +17,30 @@ uv sync
 
 ## Usage
 
+### Obtaining the reference bearing
+
+The geographic bearing of the reference antenna is computed from the
+phase-centre and landmark coordinates using `compute_bearing()`:
+
+```python
+from tart_position_cal import compute_bearing
+
+# UNAM: phase-centre to distant hill
+bearing = compute_bearing(-22.612053, 17.056784,
+                          -22.553822, 17.077290)
+# bearing = 18.112521...
+```
+
+### Running the calibration
+
 ```bash
 tart-position-cal \
     --measurements antenna_measurements.ods \
     --positions antenna_positions.json \
     --output calibrated_antenna_positions.json \
     --rot-index 3 \
-    --rot-degrees 18.1125
+    --rot-degrees 18.1125 \
+    --chirality-index 10
 ```
 
 ### Options
@@ -36,6 +53,7 @@ tart-position-cal \
 | `--output` | Path for output calibrated positions JSON (required) |
 | `--rot-index` | Antenna index for global rotation constraint (default: 0) |
 | `--rot-degrees` | Target geographic angle in degrees for constrained antenna (default: 0) |
+| `--chirality-index` | Antenna index to break reflection (chirality) degeneracy. Requires `--rot-index`. |
 | `--max-iter` | Maximum optimizer iterations (default: 500) |
 | `--max-position-error` | Search bound half-width in mm (default: 4200) |
 | `--no-plots` | Skip diagnostic plot generation |
@@ -43,6 +61,7 @@ tart-position-cal \
 | `--irls` | Use Iteratively Reweighted Least Squares for robust calibration |
 | `--irls-weight-fn` | Weight function for IRLS: `tukey` (bisquare) or `huber` (default: `tukey`) |
 | `--irls-max-iter` | Maximum IRLS outer iterations (default: 10) |
+| `--title` | Optional prefix prepended to all output file names (e.g. `na-unam`) |
 
 ### Input format
 
@@ -84,6 +103,7 @@ tart-position-cal \
     --output calibrated_antenna_positions.json \
     --rot-index 3 \
     --rot-degrees 18.1125 \
+    --chirality-index 10 \
     --irls
 ```
 
@@ -98,11 +118,20 @@ weights after each solve to down-weight outliers.  Two weight functions are avai
 The outer loop stops when the parameter vector stops moving (`< 1e-4` mm) or after
 `--irls-max-iter` iterations (default 10).
 
-## Example: na-unam site
+## Example: UNAM site (Namibia)
 
-The TART station at UNAM, Namibia (24 antennas on 5 spiral arms).  A rotation
-constraint fixes antenna 3 at 18.1125° geographic to resolve the global orientation
-ambiguity.
+The TART station at UNAM, Namibia (24 antennas on 5 spiral arms).
+
+**Bearing:** antenna 3 aligns with a distant hill.  Compute the bearing:
+
+```python
+from tart_position_cal import compute_bearing
+bearing = compute_bearing(-22.612053, 17.056784,
+                          -22.553822, 17.077290)
+# bearing = 18.112521...
+```
+
+**Calibration:**
 
 ```bash
 tart-position-cal \
@@ -110,7 +139,8 @@ tart-position-cal \
     --positions example/antenna_positions.json \
     --output na-unam_processed_antenna_positions.json \
     --rot-index 3 \
-    --rot-degrees 18.1125
+    --rot-degrees 18.1125 \
+    --chirality-index 10
 ```
 
 ```

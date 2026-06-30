@@ -21,6 +21,46 @@ def dist(a, b):
     return np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
 
 
+def compute_bearing(lat1, lon1, lat2, lon2):
+    """Compute the geographic bearing from one point to another.
+
+    Solves the inverse geodesic problem on the WGS84 ellipsoid using the
+    PROJ library.  Returns the forward azimuth (degrees east of north)
+    from ``(lat1, lon1)`` to ``(lat2, lon2)``.
+
+    This is the value to pass to ``--rot-degrees``.
+
+    Parameters
+    ----------
+    lat1, lon1 : float
+        Latitude and longitude of the origin (the TART phase-centre),
+        in decimal degrees.
+    lat2, lon2 : float
+        Latitude and longitude of the destination (the distant landmark),
+        in decimal degrees.
+
+    Returns
+    -------
+    bearing : float
+        Geographic bearing in degrees east of north.
+
+    Examples
+    --------
+    >>> # UNAM telescope to distant hill
+    >>> compute_bearing(-22.612053, 17.056784, -22.553822, 17.077290)
+    18.1125...
+    """
+    try:
+        import pyproj
+    except ImportError:
+        raise ImportError(
+            "compute_bearing requires pyproj.  Install it with: pip install pyproj"
+        )
+    geodesic = pyproj.Geod(ellps="WGS84")
+    fwd_azimuth, _back_azimuth, _distance = geodesic.inv(lon1, lat1, lon2, lat2)
+    return fwd_azimuth
+
+
 def _i_x(i):
     """Index of x-coordinate for antenna i in flat parameter vector."""
     return 2 * i
