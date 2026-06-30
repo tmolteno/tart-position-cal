@@ -5,5 +5,11 @@ __pycache__/
 *.pyc
 *.egg-info/
 dist/
-uv.lock
 workshop
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Local agent/AI scratch
+.qwen/
