@@ -49,20 +49,28 @@ distinguish them.
 
 ### Why this matters
 
-If the initial position estimate in the design file were somehow closer
-(in parameter space) to the reflected configuration than to the true
-one, the local optimiser (L-BFGS-B or TRF) would converge to the mirror
-image. All residuals would look equally good, and the error would be
-undetectable from the calibration output alone.
+If the initial position estimate in the design file is closer (in
+parameter space) to the reflected configuration than to the true one,
+the local optimiser (TRF) will converge to the mirror image. All
+residuals look equally good, and the error is undetectable from the
+calibration output alone — the cost function cannot distinguish the
+true array from its reflection.
 
-In practice this is unlikely because:
+**This is not a hypothetical edge case.** Antenna arrays are sometimes
+physically assembled as a mirror image of the nominal design — e.g. a
+spiral arm wound the opposite way round during construction. The UNAM
+deployment is a real example: the as-built array turned out to have the
+*opposite* handedness to the nominal design file used as the initial
+guess. Nothing in the radial or pairwise distance measurements, nor the
+bearing constraint, can catch this, because all three are invariant
+under reflection by construction (see above). The coordinate bounds
+($\pm 4.2$ m default) only help when the reflected antenna position
+happens to fall outside the box — for antennas near the symmetry axis
+it usually doesn't, so it is not a guarantee either.
 
-1. The design positions are close to the as-built configuration and
-   share its chirality.
-2. The coordinate bounds ($\pm 4.2$ m default) typically exclude the
-   reflected solution for antennas far from the symmetry axis.
-
-But neither of these is a *guarantee*.
+The consequence: **you cannot assume the design/initial-guess file has
+the correct chirality.** It must be checked against the true, as-built
+array (see "Determining the true chirality" below) before it is trusted.
 
 ## The chirality constraint
 
@@ -82,8 +90,12 @@ the `chirality_index` parameter in the Python API).
    C = \mathbf{p}_k \times \mathbf{p}_c = x_k y_c - y_k x_c
    \]
 
-3. Record the sign $s = \operatorname{sign}(C)$. This encodes the
-   chirality of the initial configuration.
+3. Specify the sign $s$ of the as-built array via the
+   `--chirality-sign` CLI argument (`positive` = $+1$, `negative` =
+   $-1$).  The sign must come from an independent observation of the
+   physical array; **it is not inferred from the `initial_guess`
+   file.**  See "Determining the true chirality" below for how to
+   determine the correct sign on site.
 4. During optimisation, add a one-sided penalty that is zero when the
    sign matches, and quadratic when it flips:
 
@@ -111,6 +123,87 @@ antenna, ideally roughly perpendicular. For the UNAM array with
 `--rot-index 3`, antenna 10 or 15 would be suitable (they lie on
 different arms and are far from collinear with antenna 3).
 
+### Determining the true chirality
+
+Choosing *which* antenna to use as $c$ is a separate question from
+knowing *what sign it should produce*. The sign that matters is the
+sign of the **actual, as-built** array — not whatever the nominal
+design/initial-guess file says.
+
+The distance measurements cannot tell you this: $r_i$ and $\delta_{ij}$
+are exactly the same for the true array and its mirror image, and the
+bearing constraint only pins down rotation, not reflection (see
+"Symmetries of the distance data" above). So the true handedness has to
+come from an **independent observation of the physical array**, for
+example:
+
+- Standing at the phase centre, facing the reference antenna $k$, and
+  noting by eye whether antenna $c$ is physically to your left or your
+  right.
+- A site photo or sketch taken during installation that records which
+  way the spiral arms actually wind, compared against the winding
+  direction implied by the design file.
+
+Once you know the true sign, pass it directly to the software via
+`--chirality-sign`:
+
+- If antenna $c$ is to the **left** of the reference bearing line (as seen
+  standing at the phase centre facing $k$), use `--chirality-sign positive`.
+- If antenna $c$ is to the **right**, use `--chirality-sign negative`.
+
+The software will enforce exactly that sign regardless of what the
+`initial_guess` file says.  You do **not** need to mirror or otherwise
+manipulate the input file — the sign you specify is the sign the
+optimiser respects.
+
+If the design file agrees with reality, the chirality constraint adds
+zero cost; if the design file disagrees, the constraint actively
+steers the optimiser away from the (wrong) initial-guess chirality
+toward the (correct) as-built chirality.
+
+### Intuition: picking it without doing any maths
+
+You don't need to compute a cross product by hand to choose a good
+chirality antenna — a couple of mental pictures are enough.
+
+1. **Draw the reference ray.** Imagine standing at the phase centre and
+   facing antenna $k$ (the reference bearing direction). Extend that
+   line all the way through the origin and out the other side. This
+   line is the mirror axis: it's the one place a reflection could pivot
+   around without anyone noticing from the distances alone.
+
+2. **Pick an antenna clearly off to one side.** Any antenna $c$ that
+   sits clearly to the *left* or *right* of that line — not hugging it
+   — works as your $c$. But picking $c$ only chooses *which* antenna to
+   use; it does not choose the *correct sign*. That sign must come from
+   the actual, physically built array (see "Determining the true
+   chirality" above) — the code will happily lock onto whatever
+   handedness your initial-guess file has, even if it's the wrong one,
+   so don't assume the design file is automatically correct.
+
+3. **The further around the array, the better.** An antenna roughly
+   90° away around the array from the reference antenna (e.g. on a
+   spiral arm pointing in a very different direction) gives the
+   strongest signal, because the penalty is normalised by $\approx
+   \sin$ of the angle between $\mathbf{p}_k$ and $\mathbf{p}_c$ — that's
+   largest near 90° and vanishes near 0°/180°. So as a rule of thumb:
+   **pick an antenna on a different arm, as close to a right angle from
+   the reference antenna as you can get.**
+
+4. **Avoid the danger zone.** Antennas close to the reference ray
+   itself, or close to its 180° opposite, are the ones to avoid — not
+   because they're forbidden (only *exact* collinearity raises an
+   error), but because a near-collinear choice gives a fragile,
+   easily-flipped signal early in the optimisation, before the
+   positions have settled.
+
+In short: stand at the centre, look along the reference bearing, and
+pick anything confidently off to one side and roughly perpendicular —
+ideally on a different spiral arm. That gives you a robust *choice* of
+$c$. It does not, by itself, tell you which sign is correct — for that
+you still need to check against the actual built array, not the
+design file.
+
 ### Usage
 
 ```bash
@@ -120,13 +213,16 @@ tart-position-cal \
     --output calibrated_antenna_positions.json \
     --rot-index 3 \
     --rot-degrees 18.1125 \
-    --chirality-index 10
+    --chirality-index 10 \
+    --chirality-sign positive
 ```
 
-If the initial position file has the correct chirality (which is always
-the case for TART design files), this constraint is satisfied
-automatically and adds zero cost. Its only effect is to prevent the
-optimiser from crossing into the mirror solution.
+If the observed chirality sign matches this, the constraint adds zero
+cost during optimisation; its only effect is to prevent the optimiser
+from crossing into the mirror solution.  If the as-built array has the
+opposite handedness (as happened at UNAM), pass `--chirality-sign
+negative` instead — the software will enforce the correct, as-built
+sign regardless of what the `initial\_guess` file says.
 
 ### In IRLS mode
 
@@ -142,6 +238,6 @@ never relaxed by the robust weighting scheme.
 |-------------------------|---------------------|-------------------|
 | Phase centre at origin  | (implicit)          | Translation       |
 | Reference bearing       | `--rot-index`, `--rot-degrees` | Rotation |
-| Chirality (cross product sign) | `--chirality-index` | Reflection |
+| Chirality (cross product sign) | `--chirality-index`, `--chirality-sign` | Reflection |
 
 With all three constraints active, the global frame is fully determined.

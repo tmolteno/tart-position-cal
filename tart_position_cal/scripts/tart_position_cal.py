@@ -66,8 +66,18 @@ def main():
         type=int,
         default=None,
         help="Antenna index used to break reflection (chirality) degeneracy. "
-        "The sign of p_ref × p_chirality from the initial positions is "
-        "enforced as a soft constraint. Requires --rot-index.",
+        "Requires --rot-index and --chirality-sign.",
+    )
+    parser.add_argument(
+        "--chirality-sign",
+        choices=["positive", "negative"],
+        default=None,
+        help="Required with --chirality-index. The sign of "
+        "p_ref x p_chirality in the actual, as-built array (NOT the "
+        "design/initial-positions file) -- determine this by observing "
+        "whether the chirality antenna lies to the left (positive) or "
+        "right (negative) of the reference antenna's bearing line. See "
+        "doc/SYMMETRY.md.",
     )
     parser.add_argument(
         "--max-iter",
@@ -137,6 +147,14 @@ def main():
             f"positions have {initial_guess.shape[0]}"
         )
 
+    if args.chirality_index is not None and args.chirality_sign is None:
+        parser.error(
+            "--chirality-index requires --chirality-sign (positive or "
+            "negative), determined from the actual as-built array -- "
+            "see doc/SYMMETRY.md."
+        )
+    chirality_sign = {"positive": 1.0, "negative": -1.0}.get(args.chirality_sign)
+
     # --- Calibrate ---
     if args.irls:
         print(
@@ -151,6 +169,7 @@ def main():
             rot_index=args.rot_index,
             rot_degrees=args.rot_degrees,
             chirality_index=args.chirality_index,
+            chirality_sign=chirality_sign,
             max_position_error=args.max_position_error,
             maxiter=args.max_iter,
             irls_max_iter=args.irls_max_iter,
@@ -170,6 +189,7 @@ def main():
             rot_index=args.rot_index,
             rot_degrees=args.rot_degrees,
             chirality_index=args.chirality_index,
+            chirality_sign=chirality_sign,
             max_position_error=args.max_position_error,
             maxiter=args.max_iter,
         )

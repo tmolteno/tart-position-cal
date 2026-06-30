@@ -276,6 +276,7 @@ def _build_problem(
     rot_index=None,
     rot_degrees=None,
     chirality_index=None,
+    chirality_sign=None,
     chirality_weight=1e6,
     max_position_error=4200.0,
     radius_weight=10.0,
@@ -335,7 +336,14 @@ def _build_problem(
     ]
     pair_values = np.array([m_ij[i, j] for (i, j) in pairs])
 
-    # --- Chirality sign from initial guess ---
+    # --- Chirality sign: declared explicitly by the caller, NOT inferred ---
+    # from the initial guess.  The initial guess is only used here to check
+    # that (rot_index, chirality_index) is not a degenerate (collinear) pair;
+    # it is deliberately *not* used to decide which sign to enforce, because
+    # an as-built array can be mirrored relative to its nominal design file
+    # (this happened at UNAM) and the optimiser cannot detect that on its
+    # own.  The caller must determine the true sign from the physical array
+    # (see doc/SYMMETRY.md) and pass it in.
     expected_chirality_sign = None
     chirality_norm = None
     if chirality_index is not None and rot_index is not None:
@@ -344,13 +352,21 @@ def _build_problem(
         x_chi = initial_guess[chirality_index, 0]
         y_chi = initial_guess[chirality_index, 1]
         cross = x_ref * y_chi - y_ref * x_chi
-        expected_chirality_sign = np.sign(cross)
-        chirality_norm = radius[rot_index] * radius[chirality_index]
         if abs(cross) < 1e-6:
             raise ValueError(
                 f"chirality_index={chirality_index} is collinear with "
                 f"rot_index={rot_index}; cannot determine chirality sign"
             )
+        if chirality_sign not in (1, -1, 1.0, -1.0):
+            raise ValueError(
+                f"chirality_index={chirality_index} requires chirality_sign "
+                f"to be explicitly +1 or -1; got {chirality_sign!r}. This "
+                "must be determined from the actual as-built array, not "
+                "guessed or derived from the initial guess — see "
+                "doc/SYMMETRY.md."
+            )
+        expected_chirality_sign = float(chirality_sign)
+        chirality_norm = radius[rot_index] * radius[chirality_index]
 
     return _Problem(
         n_ant=n_ant,
@@ -396,6 +412,7 @@ def calibrate(
     rot_index=None,
     rot_degrees=None,
     chirality_index=None,
+    chirality_sign=None,
     chirality_weight=1e6,
     max_position_error=4200.0,
     radius_weight=10.0,
@@ -422,12 +439,21 @@ def calibrate(
         Target geographic angle (degrees) for *rot_index*.
     chirality_index : int or None
         Antenna index used to break the reflection (chirality) degeneracy.
-        The sign of the cross product ``p_ref × p_chirality`` from the
-        *initial_guess* is used as a soft constraint.  Requires *rot_index*.
+        Requires *rot_index* and *chirality_sign*.
+    chirality_sign : {1, -1, None}
+        The required sign of the cross product ``p_ref × p_chirality``,
+        enforced as a soft constraint.  This is **not** derived from
+        *initial_guess* — it must be determined by the caller from the
+        actual, as-built antenna array (e.g. by observing whether the
+        chirality antenna lies to the left (+1) or right (-1) of the
+        reference antenna's bearing line).  An as-built array can be
+        mirrored relative to its nominal design file, so trusting the
+        initial guess's sign is not safe; see ``doc/SYMMETRY.md``.
+        Required (and validated) whenever *chirality_index* is given.
     chirality_weight : float
         Weight applied to the chirality penalty term.  Normalized cross
         product is dimensionless (≈sin(angle)), so a weight of 1e6
-        effectively locks the chirality to the initial guess.
+        effectively locks the chirality to *chirality_sign*.
     max_position_error : float
         Half-width of the search bounds around each initial coordinate (mm).
     radius_weight : float
@@ -454,8 +480,9 @@ def calibrate(
     ------
     ValueError
         If ``initial_guess`` or ``m_ij`` dimensions disagree with
-        ``len(radius)``, or if ``rot_index``/``chirality_index`` are outside
-        ``[0, n_ant)``.
+        ``len(radius)``, if ``rot_index``/``chirality_index`` are outside
+        ``[0, n_ant)``, or if ``chirality_index`` is given without a valid
+        ``chirality_sign`` of ``+1`` or ``-1``.
     """
     prob = _build_problem(
         radius,
@@ -465,6 +492,7 @@ def calibrate(
         rot_index=rot_index,
         rot_degrees=rot_degrees,
         chirality_index=chirality_index,
+        chirality_sign=chirality_sign,
         chirality_weight=chirality_weight,
         max_position_error=max_position_error,
         radius_weight=radius_weight,
@@ -530,6 +558,7 @@ def calibrate_irls(
     rot_index=None,
     rot_degrees=None,
     chirality_index=None,
+    chirality_sign=None,
     chirality_weight=1e6,
     max_position_error=4200.0,
     radius_weight=10.0,
@@ -571,6 +600,7 @@ def calibrate_irls(
         rot_index=rot_index,
         rot_degrees=rot_degrees,
         chirality_index=chirality_index,
+        chirality_sign=chirality_sign,
         chirality_weight=chirality_weight,
         max_position_error=max_position_error,
         radius_weight=radius_weight,

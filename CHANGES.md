@@ -36,10 +36,17 @@
 - CLI: moved the previously buried `import os` (formerly inline inside
   `main()`, after its first use) to the module imports at the top of
   `tart_position_cal.py`.
-- `tests/test_calibrate.py`: 31 tests covering `compute_bearing`,
-  `geo_angle`, `calibrate`, `calibrate_irls`, chirality constraint,
-  bounds, collinearity guard, input validation, the API timeout, and loader
-  error handling.
+- `--chirality-sign` (CLI) / `chirality_sign` (API): the chirality
+  handedness is now specified explicitly (`positive` / `+1` or
+  `negative` / `-1`), not inferred from the initial-position file.
+  `--chirality-sign` is required when `--chirality-index` is used.
+  This prevents silent enforcement of the wrong chirality when the
+  as-built array is assembled mirrored relative to its design file
+  (which happened at UNAM).  `doc/SYMMETRY.md` updated accordingly.
+- `tests/test_calibrate.py`: 35 tests covering `compute_bearing`,
+  `geo_angle`, `calibrate`, `calibrate_irls`, chirality constraint
+  (including explicit sign), bounds, collinearity guard, input
+  validation, the API timeout, and loader error handling.
 - Tool configuration in `pyproject.toml`: `[tool.ruff]` pins
   `line-length = 100` and `target-version = "py311"`, with `[tool.ruff.lint]`
   `extend-select = ["E501"]` enforcing the line length on top of ruff's

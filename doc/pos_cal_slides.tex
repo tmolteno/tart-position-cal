@@ -127,17 +127,19 @@
 
 \begin{frame}{Least Squares Estimator}
 
-Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{ij}$, form:
+Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{ij}$, $\theta_k$, form:
 
 \begin{align}
- L(x, y) &= L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y) \\[4pt]
- L_r(x,y) &= \sum_{i=1}^{N} \left( r_i - \sqrt{x_i^2 + y_i^2} \right)^2 \\[4pt]
- L_{ij}(x,y) &= \sum_{i,j=1}^{N} \left( \delta_{ij} - \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \right)^2 \\[4pt]
- L_\theta(x,y) &= \left( \theta_k - \arctan\!\left(\frac{x_k}{y_k}\right) \right)^2
+ L(x, y) = w_r\, L_r(x,y) + L_{ij}(x,y) + \lambda\, L_\theta(x,y) + \gamma\, L_\chi(x,y)
 \end{align}
+\begin{align*}
+ L_r(x,y) &= \sum_{i=1}^{N} \left( r_i - \sqrt{x_i^2 + y_i^2} \right)^2 \\[2pt]
+ L_{ij}(x,y) &= \sum_{i<j} \left( \delta_{ij} - \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \right)^2 \\[2pt]
+ L_\theta(x,y) &= \left( \theta_k - \theta_k^s \right)^2
+\end{align*}
 
-\vspace{4pt}
-{\small $L_r$: radial residuals. $L_{ij}$: pairwise distance residuals. $L_\theta$: rotation constraint (antenna $k$ at measured bearing $\theta_k$). $\lambda \approx 100$ strongly enforces rotation. Radial term weighted $\times 10$ vs.\ pairwise.}
+\vspace{2pt}
+{\small $L_r$: radial residuals. $L_{ij}$: pairwise residuals ($i<j$, 276 unique pairs). $L_\theta$: rotation constraint. $L_\chi$: chirality (reflection) constraint --- see \emph{Symmetries}, below. $w_r=10$ up-weights the more reliable radial measurements, $\lambda\approx100$ enforces rotation, $\gamma\approx10^6$ enforces chirality.}
 \end{frame}
 
 % --- Global Orientation Calibration ---
@@ -170,7 +172,7 @@ Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{i
     r_i^s = \sqrt{x_i^2 + y_i^2}, \qquad
     \delta_{ij}^s = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}
   \end{equation*}
-  \item Minimize $L(x,y)$ using \textbf{L-BFGS-B} (SciPy library)
+  \item Minimize $L(x,y)$ using \textbf{Trust-Region Reflective} (TRF) least squares (\texttt{scipy.optimize.least\_squares}), bounded to $\pm4.2$~m around each initial coordinate
   \item Compute residuals: $\epsilon_i = r_i - r_i^s$, $\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$
   \item Flag outliers where $|\epsilon| > \tau$, re-measure, and repeat
   \item Converges when all residuals are acceptable
@@ -190,7 +192,7 @@ Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{i
     arrow/.style={-{Stealth[scale=0.9]}, thick},
 ]
 
-\node[box] (start)                    {Initial position\\estimates $\{x_i, y_i\}$};
+\node[box] (start)                    {Global orientation and initial position\\estimates $\{x_i, y_i\}, \theta_k$};
 \node[box] (measure) [below=of start] {Take measurements\\$r_i$ (radial), $\delta_{ij}$ (pairwise)};
 \node[box] (optimize) [below=of measure] {Least-squares\\minimization of $L(x,y)$};
 \node[box] (residuals) [below=of optimize] {Compute residuals\\$\epsilon_i = r_i - r_i^s$,\\$\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$};
@@ -213,12 +215,77 @@ Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{i
 \end{center}
 \end{frame}
 
+% --- Symmetries ---
+
+\begin{frame}{Symmetries of the Distance Data}
+Distances alone do not fully determine $\{x_i, y_i\}$. Three symmetries leave $r_i$ and $\delta_{ij}$ unchanged:
+
+\vspace{4pt}
+\begin{center}
+\begin{tabular}{lll}
+\hline
+Symmetry & Type & Resolved by \\
+\hline
+Translation & continuous (2 DOF) & phase centre fixed at $(0,0)$ \\
+Rotation & continuous (1 DOF) & bearing constraint $\theta_k$ \\
+Reflection & discrete ($\mathbb{Z}_2$) & \textbf{not yet resolved} \\
+\hline
+\end{tabular}
+\end{center}
+
+\vspace{8pt}
+\textbf{The problem:} a mirror image of the array, reflected across the line at bearing $\theta_k$, preserves every $r_i$, $\delta_{ij}$, \emph{and} $\theta_k$. The true configuration and its reflection are degenerate minima of $L(x,y)$ --- indistinguishable from the residuals alone.
+\end{frame}
+
+\begin{frame}{Breaking the Reflection Degeneracy: Chirality}
+\begin{itemize}
+  \item Pick a second antenna $c$, not collinear with reference antenna $k$ (ideally on a different spiral arm)
+  \item From the \emph{initial guess}, compute the cross product and its sign:
+  \[
+    C = \mathbf{p}_k \times \mathbf{p}_c = x_k y_c - y_k x_c, \qquad s = \operatorname{sign}(C)
+  \]
+  \item Penalise the optimizer if it flips that sign:
+  \[
+    L_\chi = \left[ \min\!\left(0,\; s \cdot \frac{x_k y_c - y_k x_c}{r_k r_c}\right) \right]^2
+  \]
+  \item Normalised by $r_k r_c$ so the penalty is dimensionless ($\approx \sin\theta$); weight $\gamma \approx 10^6$ makes it an effective hard constraint
+  \item Zero cost when chirality already matches the initial guess --- only acts if the optimizer tries to cross into the mirror solution
+  \item CLI: \texttt{--chirality-index}~$c$ (requires \texttt{--rot-index})
+  \item In IRLS mode, $L_\chi$ keeps weight 1 always --- never relaxed by robust down-weighting
+\end{itemize}
+\end{frame}
+
 % --- Final positions ---
 
 \begin{frame}{Calibrated Positions}
  \includegraphics[width=\linewidth]{fig/final_positions.png}
  \vspace{4pt}
- {\small Initial position estimates (blue) and final calibrated positions (orange). Note the constructed array has clockwise-oriented spiral arms --- opposite to the initial assumption.}
+ {\small Initial position estimates (blue) and final calibrated positions (orange). The constructed array has clockwise-oriented spiral arms --- opposite to the initial assumption. The chirality constraint is what lets the optimizer find \emph{this} configuration rather than its mirror image.}
+\end{frame}
+
+% --- CLI usage ---
+
+\begin{frame}[fragile]{The \texttt{tart-position-cal} Package}
+Open-source Python package (GPL-3.0), CLI + programmatic API, installable via \texttt{pip}~\cite{moltento2026tartpositioncal}.
+
+\vspace{6pt}
+\begin{lstlisting}[basicstyle=\ttfamily\small, breaklines=true]
+tart-position-cal \
+    --measurements antenna_measurements.ods \
+    --positions antenna_positions.json \
+    --output calibrated_antenna_positions.json \
+    --rot-index 3 --rot-degrees 18.1125 \
+    --chirality-index 10 \
+    --irls
+\end{lstlisting}
+
+\vspace{4pt}
+\begin{itemize}
+  \item \texttt{--rot-index}/\texttt{--rot-degrees}: fix global rotation
+  \item \texttt{--chirality-index}: fix reflection (handedness)
+  \item \texttt{--irls}: robust calibration (next section)
+  \item \texttt{compute\_bearing()}: solves the inverse geodesic problem (WGS84, via PROJ) to get \texttt{--rot-degrees} from two lat/lon pairs
+\end{itemize}
 \end{frame}
 
 % --- UNAM Deployment ---
@@ -232,20 +299,20 @@ Given the 24 antenna positions $\{x_i, y_i\}$ and measurements $r_i$, $\delta_{i
 \vspace{4pt}
 \textbf{Initial conditions:}
 \begin{itemize}
-  \item Initial cost $L(x,y) = 6.5 \times 10^7$ --- substantial disagreement with measurements
+  \item Initial cost $L(x,y) = 3.5 \times 10^7$ --- substantial disagreement with measurements
 \end{itemize}
 \vspace{4pt}
 \textbf{Global orientation:}
 \begin{itemize}
   \item Reference: antenna~3 aligned with distant hill at $(-22.553822^\circ, 17.077290^\circ)$
-  \item Computed bearing: $\beta = 18.1125^\circ$
+  \item Computed bearing: $\beta = 18.1125^\circ$; chirality fixed via antenna~10
 \end{itemize}
 \vspace{4pt}
 \textbf{Calibration outcome:}
 \begin{itemize}
-  \item L-BFGS-B converged in 117 iterations
-  \item Final cost: $L(x,y) = 7.66 \times 10^2$
-  \item 90th percentile of absolute residuals: \textbf{1.53~mm} ($\approx 0.008\lambda$ at L1)
+  \item TRF converged in 20 iterations
+  \item Final cost: $L(x,y) = 4.35 \times 10^2$
+  \item 90th percentile of absolute residuals: \textbf{1.65~mm} ($\approx 0.009\lambda$ at L1)
 \end{itemize}
 \end{frame}
 
@@ -284,16 +351,17 @@ Ant. & $x$ (m) & $y$ (m) & Ant. & $x$ (m) & $y$ (m) \\
 \begin{frame}{Residual Analysis}
 \begin{columns}
  \begin{column}{0.5\linewidth}
-  \includegraphics[width=\linewidth]{../na-unam/residual_histogram.png}
+  \includegraphics[width=\linewidth]{fig/residual_histogram.png}
   \vspace{4pt}
-  {\small 90th percentile of absolute residuals: \textbf{1.53~mm}. Distribution is symmetric around zero.}
+  {\small Distribution is symmetric around zero, narrow spread.}
  \end{column}
  \begin{column}{0.5\linewidth}
   \begin{itemize}
     \item Residuals = difference between measured and simulated distances after calibration
-    \item Large residuals typically indicate measurement errors
-    \item These are flagged for re-measurement in the next iteration
-    \item Sub-millimeter accuracy for the majority of antenna pairs
+    \item Median absolute deviation: \textbf{0.63~mm}
+    \item Standard deviation: 1.11~mm
+    \item 50th / 90th percentile $|$res$|$: 0.59 / \textbf{1.65~mm}
+    \item Large residuals flagged for re-measurement in the next iteration
   \end{itemize}
  \end{column}
 \end{columns}
@@ -303,41 +371,66 @@ Ant. & $x$ (m) & $y$ (m) & Ant. & $x$ (m) & $y$ (m) \\
 
 \begin{frame}{UNAM: Largest Residuals}
 \vspace{-8pt}
-{\small Residuals exceeding the 90th percentile (1.53~mm). Negative = measured distance was smaller than calibrated distance.}
+{\small Residuals exceeding the 90th percentile (1.65~mm). Negative = measured distance was smaller than calibrated distance.}
 \begin{center}
 \begin{tabular}{rrr||rrr}
 \hline
 $i$ & $j$ & Res. (mm) & $i$ & $j$ & Res. (mm) \\
 \hline
-19 & 9  & 5.0  & 14 & 4  & $-2.2$ \\
-17 & 16 & 4.4  & 12 & 3  & $-2.1$ \\
- 9 & 2  & 4.2  & 12 & 0  & $-2.0$ \\
-17 & 4  & 3.6  & 14 & 0  & $-2.0$ \\
-22 & 12 & 3.3  & 17 & 9  & $-2.0$ \\
-14 & 1  & $-3.2$ & 19 & 4  & $-2.8$ \\
-17 & 8  & $-2.8$ & 22 & 9  & $-2.3$ \\
- 5 & 2  & $-2.2$ &     &    &       \\
+ 9 & 19 & 5.0  &  8 & 17 & $-2.8$ \\
+16 & 17 & 4.5  &  0 & 12 & $-2.5$ \\
+ 2 &  9 & 4.1  &  2 &  5 & $-2.5$ \\
+ 2 & 13 & $-4.0$ &  4 & 14 & $-2.5$ \\
+ 3 &  7 & $-3.5$ &  0 & 14 & $-2.4$ \\
+ 1 & 14 & $-3.5$ &  3 & 12 & $-2.3$ \\
+ 4 & 17 & 3.4  &    &    &       \\
+12 & 22 & 3.1  &    &    &       \\
+ 4 & 19 & $-3.1$ &    &    &       \\
 \hline
 \end{tabular}
 \end{center}
 \vspace{4pt}
-{\small These outliers would be re-measured in the next iteration.}
+{\small These outliers would be re-measured in the next iteration --- or down-weighted automatically by IRLS.}
+\end{frame}
+
+% --- IRLS ---
+
+\begin{frame}{Robust Calibration: IRLS}
+\begin{columns}
+ \begin{column}{0.5\linewidth}
+  \includegraphics[width=\linewidth]{fig/irls_residual_histogram.png}
+  \vspace{4pt}
+  {\small IRLS with Tukey weights: 90th percentile improves to \textbf{1.44~mm}.}
+ \end{column}
+ \begin{column}{0.5\linewidth}
+  \begin{itemize}
+    \item \texttt{--irls}: re-solves a weighted least-squares problem, recomputing weights each outer iteration to down-weight outliers
+    \item \textbf{Tukey} bisquare (default): zeroes out clear outliers
+    \item \textbf{Huber}: caps outlier influence with a saturating penalty
+    \item Converged in 4 outer iterations for UNAM
+    \item MAD: 0.63 $\to$ 0.49~mm; 90th pct: 1.65 $\to$ 1.44~mm
+    \item Unweighted objective \emph{rises} ($4.35{\times}10^2 \to 5.40{\times}10^2$) since the down-weighted outliers dominated it
+  \end{itemize}
+ \end{column}
+\end{columns}
 \end{frame}
 
 % --- Conclusions ---
 
+\begin{frame}{Conclusions}
+\begin{itemize}
+  \item Practical, accurate antenna position calibration using only a tape measure and one geographic bearing
+  \item Suitable for workshop-based telescope deployments
+  \item UNAM: MAD 0.63~mm ($\approx 0.003\lambda$), 90th pct 1.65~mm ($\approx 0.009\lambda$) at L1 --- well within imaging requirements
+  \item Outlier flagging \& re-measurement (or IRLS) makes the method robust to inevitable survey errors
+  \item Calibrated positions upload directly to the telescope API, ready for imaging
+\end{itemize}
+\end{frame}
 
 % --- Future Work ---
 
-\begin{frame}{Improvements}
+\begin{frame}{Future Work}
 \vspace{-4pt}
-\textbf{Iteratively Reweighted Least Squares:}
-\begin{itemize}
-  \item Current OLS treats all measurements equally
-  \item IRLS with Huber loss: quadratic for small residuals, linear for large ones
-  \item Automatically down-weights outliers without manual re-measurement
-\end{itemize}
-\vspace{8pt}
 \textbf{GNSS-based Calibration:}
 \begin{itemize}
   \item TART shares L1 band (1.575~GHz) with GNSS signals

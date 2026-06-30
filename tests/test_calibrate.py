@@ -131,6 +131,7 @@ def test_calibrate_with_chirality(unam_data):
         rot_index=3,
         rot_degrees=18.1125,
         chirality_index=10,
+        chirality_sign=-1.0,
     )
     assert result_chi.fun == pytest.approx(result_no.fun, rel=1e-6)
 
@@ -145,6 +146,7 @@ def test_calibrate_irls_converges(unam_data):
         rot_index=3,
         rot_degrees=18.1125,
         chirality_index=10,
+        chirality_sign=-1.0,
     )
     assert result.fun > 0.0
     pos = result_to_positions(result, n_ant)
@@ -179,6 +181,7 @@ def test_chirality_collinearity_raises(unam_data):
             rot_index=3,
             rot_degrees=18.1125,
             chirality_index=3,
+            chirality_sign=-1.0,
         )
 
 
@@ -318,3 +321,62 @@ def test_load_measurements_too_few_rows(tmp_path):
     pd.DataFrame(cols).to_excel(p, sheet_name="Sheet1", engine="odf")
     with pytest.raises(ValueError, match="data row"):
         load_measurements(p)
+
+
+def test_chirality_sign_required(unam_data):
+    """chirality_index without chirality_sign raises ValueError."""
+    r, m, _, ini = unam_data
+    with pytest.raises(ValueError, match="requires chirality_sign"):
+        calibrate(r, m, ini, rot_index=3, rot_degrees=18.0, chirality_index=10)
+
+
+def test_chirality_sign_respected(unam_data):
+    """The calibrated positions respect an explicit chirality_sign."""
+    r, m, _, ini = unam_data
+    res = calibrate(
+        r,
+        m,
+        ini,
+        rot_index=3,
+        rot_degrees=18.1125,
+        chirality_index=10,
+        chirality_sign=-1.0,
+    )
+    pos = result_to_positions(res, ini.shape[0])
+    cross = pos[3, 0] * pos[10, 1] - pos[3, 1] * pos[10, 0]
+    assert np.sign(cross) == -1.0
+    assert res.fun < 1000.0  # good fit
+
+
+def test_chirality_sign_irls_respected(unam_data):
+    """IRLS also respects an explicit chirality_sign."""
+    r, m, _, ini = unam_data
+    res = calibrate_irls(
+        r,
+        m,
+        ini,
+        rot_index=3,
+        rot_degrees=18.1125,
+        chirality_index=10,
+        chirality_sign=-1.0,
+    )
+    pos = result_to_positions(res, ini.shape[0])
+    cross = pos[3, 0] * pos[10, 1] - pos[3, 1] * pos[10, 0]
+    assert np.sign(cross) == -1.0
+    assert res.fun > 0.0
+
+
+def test_chirality_sign_bad_value(unam_data):
+    """A chirality_sign other than ±1 raises ValueError."""
+    r, m, _, ini = unam_data
+    for bad in [0, 2, -2, 0.0, None]:
+        with pytest.raises(ValueError, match="explicitly \\+1 or -1"):
+            calibrate(
+                r,
+                m,
+                ini,
+                rot_index=3,
+                rot_degrees=18.0,
+                chirality_index=10,
+                chirality_sign=bad,
+            )

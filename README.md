@@ -101,10 +101,11 @@ to use Iteratively Reweighted Least Squares:
 tart-position-cal \
     --measurements antenna_measurements.ods \
     --positions antenna_positions.json \
-    --output calibrated_antenna_positions.json \
-    --rot-index 3 \
-    --rot-degrees 18.1125 \
-    --chirality-index 10 \
+    --output calibrated_antenna_positions.json \\
+    --rot-index 3 \\
+    --rot-degrees 18.1125 \\
+    --chirality-index 10 \\
+    --chirality-sign negative \\
     --irls
 ```
 
@@ -138,10 +139,11 @@ bearing = compute_bearing(-22.612053, 17.056784,
 tart-position-cal \
     --measurements example/antenna_measurements.ods \
     --positions example/antenna_positions.json \
-    --output na-unam_processed_antenna_positions.json \
-    --rot-index 3 \
-    --rot-degrees 18.1125 \
-    --chirality-index 10
+    --output na-unam_processed_antenna_positions.json \\
+    --rot-index 3 \\
+    --rot-degrees 18.1125 \\
+    --chirality-index 10 \\
+    --chirality-sign negative
 ```
 
 ```
