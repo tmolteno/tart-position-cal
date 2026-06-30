@@ -55,6 +55,14 @@ def main():
         help="Target geographic angle in degrees for the constrained antenna.",
     )
     parser.add_argument(
+        "--chirality-index",
+        type=int,
+        default=None,
+        help="Antenna index used to break reflection (chirality) degeneracy. "
+        "The sign of p_ref × p_chirality from the initial positions is "
+        "enforced as a soft constraint. Requires --rot-index.",
+    )
+    parser.add_argument(
         "--max-iter",
         type=int,
         default=500,
@@ -135,6 +143,7 @@ def main():
             initial_guess,
             rot_index=args.rot_index,
             rot_degrees=args.rot_degrees,
+            chirality_index=args.chirality_index,
             max_position_error=args.max_position_error,
             maxiter=args.max_iter,
             irls_max_iter=args.irls_max_iter,
@@ -153,6 +162,7 @@ def main():
             initial_guess,
             rot_index=args.rot_index,
             rot_degrees=args.rot_degrees,
+            chirality_index=args.chirality_index,
             max_position_error=args.max_position_error,
             maxiter=args.max_iter,
         )

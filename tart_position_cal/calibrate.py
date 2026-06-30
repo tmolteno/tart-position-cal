@@ -6,6 +6,7 @@ to be consistent with the measured distances.
 """
 
 import json
+
 import numpy as np
 from scipy.optimize import least_squares, minimize
 
@@ -96,6 +97,8 @@ def calibrate(
     center=(0.0, 0.0),
     rot_index=None,
     rot_degrees=None,
+    chirality_index=None,
+    chirality_weight=1e6,
     max_position_error=4200.0,
     radius_weight=10.0,
     rotation_weight=100.0,
@@ -118,6 +121,14 @@ def calibrate(
         Antenna index used to constrain global rotation.  None disables.
     rot_degrees : float or None
         Target geographic angle (degrees) for *rot_index*.
+    chirality_index : int or None
+        Antenna index used to break the reflection (chirality) degeneracy.
+        The sign of the cross product ``p_ref × p_chirality`` from the
+        *initial_guess* is used as a soft constraint.  Requires *rot_index*.
+    chirality_weight : float
+        Weight applied to the chirality penalty term.  Normalized cross
+        product is dimensionless (≈sin(angle)), so a weight of 1e6
+        effectively locks the chirality to the initial guess.
     max_position_error : float
         Half-width of the search bounds around each initial coordinate (mm).
     radius_weight : float
@@ -160,15 +171,39 @@ def calibrate(
                 non_nan_values.append(m_ij[i, j])
     non_nan_values = np.array(non_nan_values)
 
+    # --- Chirality sign from initial guess ---
+    expected_chirality_sign = None
+    chirality_norm = None
+    if chirality_index is not None and rot_index is not None:
+        x_ref = initial_guess[rot_index, 0]
+        y_ref = initial_guess[rot_index, 1]
+        x_chi = initial_guess[chirality_index, 0]
+        y_chi = initial_guess[chirality_index, 1]
+        cross = x_ref * y_chi - y_ref * x_chi
+        expected_chirality_sign = np.sign(cross)
+        chirality_norm = radius[rot_index] * radius[chirality_index]
+        if abs(cross) < 1e-6:
+            raise ValueError(
+                f"chirality_index={chirality_index} is collinear with "
+                f"rot_index={rot_index}; cannot determine chirality sign"
+            )
+
+    def chirality_penalty(x):
+        if expected_chirality_sign is None:
+            return 0.0
+        x_ref, y_ref = _p(x, rot_index)
+        x_chi, y_chi = _p(x, chirality_index)
+        cross = x_ref * y_chi - y_ref * x_chi
+        normalized = cross / chirality_norm
+        return min(0.0, normalized * expected_chirality_sign)
+
     # --- Residual functions ---
     def radius_residual(x):
         pred = np.array([dist(center, _p(x, i)) for i in range(n_ant)])
         return pred - radius
 
     def m_ij_residual(x):
-        pred = np.array(
-            [dist(_p(x, i), _p(x, j)) for (i, j) in non_nan_pairs]
-        )
+        pred = np.array([dist(_p(x, i), _p(x, j)) for (i, j) in non_nan_pairs])
         return pred - non_nan_values
 
     def rot_residual(x):
@@ -181,6 +216,7 @@ def calibrate(
         val = np.sum(radius_residual(x) ** 2) * radius_weight
         val += np.sum(m_ij_residual(x) ** 2)
         val += (rot_residual(x) ** 2) * rotation_weight
+        val += (chirality_penalty(x) ** 2) * chirality_weight
         return val
 
     options = {"maxiter": maxiter}
@@ -227,6 +263,8 @@ def calibrate_irls(
     center=(0.0, 0.0),
     rot_index=None,
     rot_degrees=None,
+    chirality_index=None,
+    chirality_weight=1e6,
     max_position_error=4200.0,
     radius_weight=10.0,
     rotation_weight=100.0,
@@ -291,10 +329,29 @@ def calibrate_irls(
     n_radius = n_ant
     n_ij = len(non_nan_values)
     n_rot = 1 if (rot_index is not None and rot_degrees is not None) else 0
-    n_total = n_radius + n_ij + n_rot
+    n_chirality = 1 if (chirality_index is not None and rot_index is not None) else 0
+    n_total = n_radius + n_ij + n_rot + n_chirality
+
+    # --- Chirality sign from initial guess ---
+    expected_chirality_sign = None
+    chirality_norm = None
+    if n_chirality:
+        x_ref = initial_guess[rot_index, 0]
+        y_ref = initial_guess[rot_index, 1]
+        x_chi = initial_guess[chirality_index, 0]
+        y_chi = initial_guess[chirality_index, 1]
+        cross = x_ref * y_chi - y_ref * x_chi
+        expected_chirality_sign = np.sign(cross)
+        chirality_norm = radius[rot_index] * radius[chirality_index]
+        if abs(cross) < 1e-6:
+            raise ValueError(
+                f"chirality_index={chirality_index} is collinear with "
+                f"rot_index={rot_index}; cannot determine chirality sign"
+            )
 
     sqrt_radius_weight = np.sqrt(radius_weight)
     sqrt_rotation_weight = np.sqrt(rotation_weight)
+    sqrt_chirality_weight = np.sqrt(chirality_weight)
 
     def combined_residuals(x):
         """Flat residual vector (unweighted)."""
@@ -308,7 +365,18 @@ def calibrate_irls(
         # Rotation residual
         if n_rot:
             xi, yi = _p(x, rot_index)
-            res[-1] = sqrt_rotation_weight * (geo_angle(xi, yi) - rot_degrees)
+            res[n_radius + n_ij] = sqrt_rotation_weight * (
+                geo_angle(xi, yi) - rot_degrees
+            )
+        # Chirality residual
+        if n_chirality:
+            x_ref, y_ref = _p(x, rot_index)
+            x_chi, y_chi = _p(x, chirality_index)
+            cross = x_ref * y_chi - y_ref * x_chi
+            normalized = cross / chirality_norm
+            res[n_radius + n_ij + n_rot] = sqrt_chirality_weight * min(
+                0.0, normalized * expected_chirality_sign
+            )
         return res
 
     # --- IRLS outer loop ---
@@ -316,6 +384,7 @@ def calibrate_irls(
     prev_x = x0.copy()
 
     for irls_iter in range(irls_max_iter):
+
         def weighted_residuals(x):
             return np.sqrt(weights) * combined_residuals(x)
 
@@ -330,9 +399,12 @@ def calibrate_irls(
         )
         new_x = res_ls.x
 
-        # Update weights from the *unweighted* residuals
+        # Update weights from measurement residuals only (exclude rotation
+        # and chirality constraints — they are priors, not noisy data).
         raw_res = combined_residuals(new_x)
-        weights = weight_fn(raw_res)
+        n_meas = n_radius + n_ij
+        weights[:n_meas] = weight_fn(raw_res[:n_meas])
+        # rotation and chirality weights stay at 1.0
 
         shift = np.max(np.abs(new_x - prev_x))
         prev_x = new_x
@@ -373,9 +445,7 @@ def compute_residuals(result, radius, m_ij, n_ant):
     """Return (radius_residuals, ij_residuals, ij_pairs) for diagnostics."""
     x = result.x
 
-    r_res = np.array(
-        [dist((0, 0), _p(x, i)) - radius[i] for i in range(n_ant)]
-    )
+    r_res = np.array([dist((0, 0), _p(x, i)) - radius[i] for i in range(n_ant)])
 
     pairs = []
     ij_res = []
