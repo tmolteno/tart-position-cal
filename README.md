@@ -50,6 +50,7 @@ tart-position-cal \
 | `--measurements` | Path to .ods file with antenna distance measurements (required) |
 | `--positions` | Path to JSON file with initial antenna positions in metres |
 | `--api` | TART API base URL to fetch initial positions from |
+| `--api-timeout` | Network timeout in seconds for `--api` requests (default: 30) |
 | `--output` | Path for output calibrated positions JSON (required) |
 | `--rot-index` | Antenna index for global rotation constraint (default: 0) |
 | `--rot-degrees` | Target geographic angle in degrees for constrained antenna (default: 0) |
@@ -148,72 +149,76 @@ Loading measurements from example/antenna_measurements.ods
   Found 24 antennas
 Loading initial positions from example/antenna_positions.json
 Running calibration (rot_index=3, rot_degrees=18.1125)
-  Optimisation finished: CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
-  Final objective: 765.8097
-  Iterations: 71
-  Function evaluations: 3920
+  Optimisation finished: `ftol` termination condition is satisfied.
+  Final objective: 434.6330
+  Iterations: 20
+  Function evaluations: 23
 Calibrated positions written to na-unam_processed_antenna_positions.json
 Radius residuals (mm):
-  Ant  0:   +1.24
-  Ant  1:   +0.79
-  Ant  2:   +1.43
-  Ant  3:   +0.36
-  Ant  4:   +1.03
-  Ant  5:   -0.12
-  Ant  6:   +0.24
-  Ant  7:   -0.12
-  Ant  8:   +0.24
-  Ant  9:   -0.25
-  Ant 10:   +0.61
-  Ant 11:   -0.28
-  Ant 12:   +1.10
-  Ant 13:   +1.70
-  Ant 14:   +0.78
-  Ant 15:   -0.17
-  Ant 16:   +0.47
-  Ant 17:   +0.26
-  Ant 18:   +0.80
-  Ant 19:   +0.89
-  Ant 20:   +0.06
-  Ant 21:   -0.17
-  Ant 22:   +0.36
-  Ant 23:   -0.06
+  Ant  0:   +0.97
+  Ant  1:   +0.63
+  Ant  2:   +1.16
+  Ant  3:   +0.31
+  Ant  4:   +0.86
+  Ant  5:   -0.07
+  Ant  6:   +0.22
+  Ant  7:   -0.06
+  Ant  8:   +0.22
+  Ant  9:   -0.18
+  Ant 10:   +0.48
+  Ant 11:   -0.21
+  Ant 12:   +0.90
+  Ant 13:   +1.40
+  Ant 14:   +0.65
+  Ant 15:   -0.12
+  Ant 16:   +0.39
+  Ant 17:   +0.23
+  Ant 18:   +0.67
+  Ant 19:   +0.75
+  Ant 20:   +0.08
+  Ant 21:   -0.10
+  Ant 22:   +0.33
+  Ant 23:   -0.02
 
-90th percentile of |ij residuals|: 1.53 mm
+Inter-antenna residual statistics:
+  Median Absolute Deviation: 0.63 mm
+  Standard Deviation:       1.11 mm
+  50th percentile |res|:    0.59 mm
+  90th percentile |res|:    1.65 mm
 
-Largest residuals (>p90):
-  res[7,3] = -3.5
-  res[13,2] = -3.4
-  res[14,1] = -3.2
-  res[17,8] = -2.8
-  res[19,4] = -2.8
-  res[22,9] = -2.3
-  res[5,2] = -2.2
-  res[14,4] = -2.2
-  res[12,3] = -2.1
-  res[12,0] = -2.0
-  res[14,0] = -2.0
-  res[17,9] = -2.0
-  res[15,9] = -1.9
-  res[22,13] = -1.9
-  res[13,7] = -1.7
-  res[20,16] = -1.6
-  res[13,0] = -1.5
-  res[22,21] = -1.5
-  res[11,7] = +1.6
-  res[22,16] = +1.6
-  res[23,15] = +1.8
-  res[15,3] = +1.8
-  res[22,15] = +2.2
-  res[22,12] = +3.3
-  res[17,4] = +3.6
-  res[9,2] = +4.2
-  res[17,16] = +4.4
-  res[19,9] = +5.0
+Largest residuals (>90th pct):
+  res[2,13] = -4.0
+  res[3,7] = -3.5
+  res[1,14] = -3.5
+  res[4,19] = -3.1
+  res[8,17] = -2.8
+  res[0,12] = -2.5
+  res[2,5] = -2.5
+  res[4,14] = -2.5
+  res[0,14] = -2.4
+  res[3,12] = -2.3
+  res[9,22] = -2.3
+  res[13,22] = -2.2
+  res[0,13] = -2.1
+  res[9,17] = -1.9
+  res[2,12] = -1.9
+  res[7,13] = -1.8
+  res[1,13] = -1.8
+  res[9,15] = -1.8
+  res[1,12] = -1.7
+  res[16,20] = -1.7
+  res[3,15] = +1.8
+  res[15,23] = +1.9
+  res[15,22] = +2.2
+  res[12,22] = +3.1
+  res[4,17] = +3.4
+  res[2,9] = +4.1
+  res[16,17] = +4.5
+  res[9,19] = +5.0
 ```
 
-The 90th-percentile inter-antenna residual of 1.53 mm shows the survey
-measurements are consistent to about ±1.5 mm.  The largest residuals (up to
+The 90th-percentile inter-antenna residual of 1.65 mm shows the survey
+measurements are consistent to about ±1.7 mm.  The largest residuals (up to
 ~5 mm) flag a few measurements that may warrant re-surveying.
 
 ## Development

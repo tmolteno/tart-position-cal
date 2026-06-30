@@ -6,7 +6,7 @@ authors:
   orcid: "https://orcid.org/0000-0002-2022-0380"
 title: "tart-position-cal"
 abstract: "Calibrate TART radio telescope antenna positions from survey measurements"
-version: 0.1.0
-date-released: 2026-06-17
+version: 0.2.0
+date-released: 2026-06-30
 url: "https://github.com/tmolteno/tart-position-cal"
 license: GPL-3.0-or-later

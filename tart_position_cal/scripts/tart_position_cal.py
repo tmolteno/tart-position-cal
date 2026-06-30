@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 
 from tart_position_cal.calibrate import (
@@ -36,6 +37,12 @@ def main():
     parser.add_argument(
         "--api",
         help="TART API base URL to fetch initial positions from (e.g. https://api.elec.ac.nz/tart/na-unam).",
+    )
+    parser.add_argument(
+        "--api-timeout",
+        type=float,
+        default=30.0,
+        help="Network timeout in seconds for --api requests (default: 30).",
     )
     parser.add_argument(
         "--output",
@@ -119,7 +126,7 @@ def main():
         initial_guess = load_initial_positions(args.positions)
     elif args.api:
         print(f"Fetching initial positions from {args.api}")
-        initial_guess = fetch_initial_positions(args.api)
+        initial_guess = fetch_initial_positions(args.api, timeout=args.api_timeout)
     else:
         parser.error("One of --positions or --api is required.")
         sys.exit(1)
@@ -181,8 +188,6 @@ def main():
             return path
         d, base = os.path.split(path)
         return os.path.join(d, f"{args.title}_{base}")
-
-    import os
 
     output_path = _titled(args.output)
     with open(output_path, "w") as f:

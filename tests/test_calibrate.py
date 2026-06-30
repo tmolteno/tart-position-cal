@@ -1,11 +1,20 @@
 """Tests for tart_position_cal.calibrate."""
 
-import math
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from tart_position_cal.calibrate import compute_bearing
+from tart_position_cal.calibrate import (
+    calibrate,
+    calibrate_irls,
+    compute_bearing,
+    fetch_initial_positions,
+    geo_angle,
+    load_initial_positions,
+    load_measurements,
+    result_to_positions,
+)
 
 # ---- compute_bearing -------------------------------------------------------
 
@@ -79,8 +88,6 @@ def test_short_distance_consistency():
 
 # ---- geo_angle consistency with compute_bearing -----------------------------
 
-from tart_position_cal.calibrate import geo_angle
-
 
 def test_geo_angle_north():
     """geo_angle matches compute_bearing: north = 0°."""
@@ -93,14 +100,6 @@ def test_geo_angle_east():
 
 
 # ---- calibrate ----------------------------------------------------------
-
-from tart_position_cal.calibrate import (
-    calibrate,
-    calibrate_irls,
-    load_initial_positions,
-    load_measurements,
-    result_to_positions,
-)
 
 
 @pytest.fixture(scope="module")
@@ -181,3 +180,141 @@ def test_chirality_collinearity_raises(unam_data):
             rot_degrees=18.1125,
             chirality_index=3,
         )
+
+
+# ---- input validation (#7) -----------------------------------------------
+
+
+def test_calibrate_rejects_rot_index_out_of_range(unam_data):
+    """rot_index >= n_ant raises a clear ValueError."""
+    radius, m_ij, n_ant, initial = unam_data
+    with pytest.raises(ValueError, match="rot_index.*out of range"):
+        calibrate(radius, m_ij, initial, rot_index=99, rot_degrees=18.0)
+
+
+def test_calibrate_rejects_negative_rot_index(unam_data):
+    """Negative rot_index raises a clear ValueError."""
+    radius, m_ij, n_ant, initial = unam_data
+    with pytest.raises(ValueError, match="out of range"):
+        calibrate(radius, m_ij, initial, rot_index=-1, rot_degrees=18.0)
+
+
+def test_calibrate_rejects_chirality_index_out_of_range(unam_data):
+    """chirality_index outside [0, n_ant) raises a clear ValueError."""
+    radius, m_ij, n_ant, initial = unam_data
+    with pytest.raises(ValueError, match="chirality_index.*out of range"):
+        calibrate(
+            radius,
+            m_ij,
+            initial,
+            rot_index=3,
+            rot_degrees=18.0,
+            chirality_index=99,
+        )
+
+
+def test_calibrate_rejects_initial_guess_row_count(unam_data):
+    """initial_guess with the wrong number of rows raises ValueError."""
+    radius, m_ij, n_ant, initial = unam_data
+    with pytest.raises(ValueError, match="rows"):
+        calibrate(radius, m_ij, initial[:5], rot_index=3, rot_degrees=18.0)
+
+
+def test_calibrate_rejects_initial_guess_shape(unam_data):
+    """initial_guess that is not (n_ant, 2) raises ValueError."""
+    radius, m_ij, n_ant, initial = unam_data
+    bad = np.hstack([initial, np.ones((n_ant, 1))])  # (n_ant, 3)
+    with pytest.raises(ValueError, match="initial_guess must have shape"):
+        calibrate(radius, m_ij, bad, rot_index=3, rot_degrees=18.0)
+
+
+def test_calibrate_rejects_m_ij_shape(unam_data):
+    """m_ij with the wrong shape raises ValueError."""
+    radius, m_ij, n_ant, initial = unam_data
+    with pytest.raises(ValueError, match="m_ij must have shape"):
+        calibrate(radius, m_ij[:10, :10], initial, rot_index=3, rot_degrees=18.0)
+
+
+def test_calibrate_irls_also_validates(unam_data):
+    """The IRLS path shares the validation (raises on bad rot_index)."""
+    radius, m_ij, n_ant, initial = unam_data
+    with pytest.raises(ValueError, match="out of range"):
+        calibrate_irls(radius, m_ij, initial, rot_index=99, rot_degrees=18.0)
+
+
+# ---- fetch_initial_positions (#8) ----------------------------------------
+
+
+def _fake_response():
+    fake = MagicMock()
+    fake.json.return_value = [[1.0, 2.0, 0.0], [4.0, 5.0, 0.0]]
+    fake.raise_for_status.return_value = None
+    return fake
+
+
+def test_fetch_initial_positions_forwards_timeout():
+    """A caller-supplied timeout is passed through to requests.get."""
+    with patch("requests.get", return_value=_fake_response()) as mock_get:
+        fetch_initial_positions("https://example.org/tart", timeout=12.5)
+    _, kwargs = mock_get.call_args
+    assert kwargs.get("timeout") == 12.5
+
+
+def test_fetch_initial_positions_default_sets_timeout():
+    """A timeout is always set, so an unresponsive API cannot hang forever."""
+    with patch("requests.get", return_value=_fake_response()) as mock_get:
+        fetch_initial_positions("https://example.org/tart")
+    _, kwargs = mock_get.call_args
+    assert kwargs.get("timeout") not in (None, 0, 0.0)
+
+
+# ---- loader error handling (#11) -----------------------------------------
+
+
+def test_load_initial_positions_missing_file(tmp_path):
+    """A missing positions file raises a clear FileNotFoundError."""
+    with pytest.raises(FileNotFoundError, match="initial positions"):
+        load_initial_positions(tmp_path / "does_not_exist.json")
+
+
+def test_load_initial_positions_bad_json(tmp_path):
+    """Malformed JSON raises a clear ValueError."""
+    p = tmp_path / "bad.json"
+    p.write_text("{ not valid json")
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        load_initial_positions(p)
+
+
+def test_load_initial_positions_missing_key(tmp_path):
+    """A positions file without the required key raises a clear ValueError."""
+    p = tmp_path / "nokey.json"
+    p.write_text('{"foo": 1}')
+    with pytest.raises(ValueError, match="antenna_positions"):
+        load_initial_positions(p)
+
+
+def test_load_measurements_missing_file(tmp_path):
+    """A missing measurements file raises a clear FileNotFoundError."""
+    with pytest.raises(FileNotFoundError, match="measurements"):
+        load_measurements(tmp_path / "does_not_exist.ods")
+
+
+def test_load_measurements_missing_sheet(tmp_path):
+    """An ODS without a 'Sheet1' sheet raises a clear ValueError."""
+    import pandas as pd
+
+    p = tmp_path / "wrong_sheet.ods"
+    pd.DataFrame({"A 0": [1.0]}).to_excel(p, sheet_name="NotSheet1", engine="odf")
+    with pytest.raises(ValueError, match="Sheet1"):
+        load_measurements(p)
+
+
+def test_load_measurements_too_few_rows(tmp_path):
+    """A Sheet1 with too few rows for the antenna count raises ValueError."""
+    import pandas as pd
+
+    p = tmp_path / "short.ods"
+    cols = {f"A {i}": [float(i)] for i in range(24)}  # only one data row
+    pd.DataFrame(cols).to_excel(p, sheet_name="Sheet1", engine="odf")
+    with pytest.raises(ValueError, match="data row"):
+        load_measurements(p)

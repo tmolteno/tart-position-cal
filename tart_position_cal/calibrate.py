@@ -6,9 +6,10 @@ to be consistent with the measured distances.
 """
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
-from scipy.optimize import least_squares, minimize
+from scipy.optimize import least_squares
 
 
 def geo_angle(x, y):
@@ -87,9 +88,30 @@ def load_measurements(path):
     import pandas as pd
 
     cols = [f"A {i}" for i in range(24)]
-    data = pd.read_excel(path, "Sheet1", usecols=cols)
+    try:
+        data = pd.read_excel(path, "Sheet1", usecols=cols)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Cannot read measurements from {path!r}: file not found"
+        ) from exc
+    except ValueError as exc:
+        # pandas raises ValueError for a missing sheet or an unreadable format.
+        raise ValueError(
+            f"Could not read measurements from {path!r}: {exc}. "
+            f"Expected an ODS spreadsheet with a sheet named 'Sheet1'."
+        ) from exc
+
+    if len(data) < 1:
+        raise ValueError(f"Measurements file {path!r} has no data rows")
     radius = data.loc[0].to_numpy(dtype=float)
     n_ant = len(radius)
+
+    if len(data) < n_ant + 1:
+        raise ValueError(
+            f"Measurements file {path!r} has {len(data)} data row(s) but the "
+            f"radius row implies {n_ant} antennas; expected at least "
+            f"{n_ant + 1} rows (1 radius + {n_ant} inter-antenna distances)."
+        )
 
     m_ij = np.zeros((n_ant, n_ant))
     for i in range(n_ant):
@@ -110,23 +132,259 @@ def load_initial_positions(path):
     ``[x, y, z]`` entries in **metres**.  Returns an ``(n_ant, 2)`` array
     in **millimetres** (z is dropped).
     """
-    with open(path) as f:
-        data = json.load(f)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Cannot read initial positions from {path!r}: file not found"
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Invalid JSON in initial-positions file {path!r}: "
+            f"{exc.msg} (line {exc.lineno}, column {exc.colno})"
+        ) from exc
+
+    if "antenna_positions" not in data:
+        raise ValueError(
+            f"Initial-positions file {path!r} has no 'antenna_positions' key"
+        )
     positions = np.array(data["antenna_positions"])
     return positions[:, :2] * 1000.0
 
 
-def fetch_initial_positions(api_url):
+def fetch_initial_positions(api_url, *, timeout=30.0):
     """Fetch initial antenna positions from a TART telescope API.
+
+    Parameters
+    ----------
+    api_url : str
+        Base URL of the TART API.
+    timeout : float or tuple
+        Network timeout in seconds passed to :func:`requests.get`.  May be a
+        single value or a ``(connect, read)`` tuple.  Defaults to 30 s so an
+        unresponsive API fails fast instead of hanging indefinitely.
 
     Returns an ``(n_ant, 2)`` array in millimetres.
     """
     import requests
 
-    r = requests.get(f"{api_url}/api/v1/imaging/antenna_positions")
+    r = requests.get(
+        f"{api_url}/api/v1/imaging/antenna_positions",
+        timeout=timeout,
+    )
     r.raise_for_status()
     positions = np.array(r.json())
     return positions[:, :2] * 1000.0
+
+
+# ---------------------------------------------------------------------------
+# Shared problem setup (used by both calibrate and calibrate_irls)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _Problem:
+    """Precomputed calibration problem shared by the solvers.
+
+    Bundles the initial parameter vector, bounds, the unique inter-antenna
+    distance pairs, and the rotation/chirality constraint bookkeeping, and
+    evaluates the flat residual vector consumed by the least-squares solvers.
+    """
+
+    n_ant: int
+    x0: np.ndarray
+    lower: np.ndarray
+    upper: np.ndarray
+    center: tuple[float, float]
+    radius: np.ndarray
+    pairs: list[tuple[int, int]]
+    pair_values: np.ndarray
+    sqrt_radius_weight: float
+    sqrt_rotation_weight: float
+    sqrt_chirality_weight: float
+    rot_index: object = None
+    rot_degrees: object = None
+    chirality_index: object = None
+    expected_chirality_sign: object = None
+    chirality_norm: object = None
+
+    @property
+    def bounds(self):
+        return (self.lower, self.upper)
+
+    @property
+    def n_radius(self):
+        return self.n_ant
+
+    @property
+    def n_ij(self):
+        return len(self.pair_values)
+
+    @property
+    def n_rot(self):
+        return 1 if (self.rot_index is not None and self.rot_degrees is not None) else 0
+
+    @property
+    def n_chirality(self):
+        return (
+            1
+            if (self.chirality_index is not None and self.rot_index is not None)
+            else 0
+        )
+
+    @property
+    def n_total(self):
+        return self.n_radius + self.n_ij + self.n_rot + self.n_chirality
+
+    def combined_residuals(self, x):
+        """Flat residual vector with term weights baked in (unweighted by IRLS)."""
+        res = np.zeros(self.n_total)
+        # Radius residuals
+        for i in range(self.n_ant):
+            res[i] = self.sqrt_radius_weight * (
+                dist(self.center, _p(x, i)) - self.radius[i]
+            )
+        # Inter-antenna residuals (one entry per unique pair)
+        for k, (i, j) in enumerate(self.pairs):
+            res[self.n_radius + k] = dist(_p(x, i), _p(x, j)) - self.pair_values[k]
+        # Rotation residual
+        if self.n_rot:
+            xi, yi = _p(x, self.rot_index)
+            res[self.n_radius + self.n_ij] = self.sqrt_rotation_weight * (
+                geo_angle(xi, yi) - self.rot_degrees
+            )
+        # Chirality residual
+        if self.n_chirality:
+            x_ref, y_ref = _p(x, self.rot_index)
+            x_chi, y_chi = _p(x, self.chirality_index)
+            cross = x_ref * y_chi - y_ref * x_chi
+            normalized = cross / self.chirality_norm
+            res[self.n_radius + self.n_ij + self.n_rot] = (
+                self.sqrt_chirality_weight
+                * min(0.0, normalized * self.expected_chirality_sign)
+            )
+        return res
+
+
+def _build_problem(
+    radius,
+    m_ij,
+    initial_guess,
+    *,
+    center=(0.0, 0.0),
+    rot_index=None,
+    rot_degrees=None,
+    chirality_index=None,
+    chirality_weight=1e6,
+    max_position_error=4200.0,
+    radius_weight=10.0,
+    rotation_weight=100.0,
+):
+    """Pre-compute everything needed to evaluate the calibration residuals.
+
+    Returns a :class:`_Problem` carrying the initial parameter vector,
+    bounds, the unique inter-antenna pairs, and the rotation/chirality
+    constraint bookkeeping.  Both :func:`calibrate` and :func:`calibrate_irls`
+    build on top of the same setup.
+    """
+    n_ant = len(radius)
+
+    # --- Validate inputs (fail early with clear messages) ---
+    initial_guess = np.asarray(initial_guess, dtype=float)
+    if initial_guess.ndim != 2 or initial_guess.shape[1] != 2:
+        raise ValueError(
+            f"initial_guess must have shape (n_ant, 2); got {initial_guess.shape}"
+        )
+    if initial_guess.shape[0] != n_ant:
+        raise ValueError(
+            f"initial_guess has {initial_guess.shape[0]} rows but len(radius)={n_ant}"
+        )
+    m_ij = np.asarray(m_ij, dtype=float)
+    if m_ij.shape != (n_ant, n_ant):
+        raise ValueError(f"m_ij must have shape ({n_ant}, {n_ant}); got {m_ij.shape}")
+    for _name, _idx in (("rot_index", rot_index), ("chirality_index", chirality_index)):
+        if _idx is not None and not (0 <= _idx < n_ant):
+            raise ValueError(
+                f"{_name}={_idx} is out of range for {n_ant} antennas "
+                f"(must be 0..{n_ant - 1})"
+            )
+
+    # --- Initial flat parameter vector: (x0, y0, x1, y1, ...) ---
+    x0 = np.empty(2 * n_ant)
+    x0[0::2] = initial_guess[:, 0]
+    x0[1::2] = initial_guess[:, 1]
+
+    # --- Bounds: box of half-width max_position_error around each antenna ---
+    lower = np.empty(2 * n_ant)
+    upper = np.empty(2 * n_ant)
+    lower[0::2] = initial_guess[:, 0] - max_position_error
+    lower[1::2] = initial_guess[:, 1] - max_position_error
+    upper[0::2] = initial_guess[:, 0] + max_position_error
+    upper[1::2] = initial_guess[:, 1] + max_position_error
+
+    # --- Unique inter-antenna pairs (upper triangle, excluding diagonal) ---
+    # load_measurements symmetrises m_ij, so each measured pair appears at
+    # both (i, j) and (j, i).  Taking i < j keeps each pair once, avoiding
+    # double-counting it in the objective and diagnostics.
+    pairs = [
+        (i, j)
+        for i in range(n_ant)
+        for j in range(i + 1, n_ant)
+        if not np.isnan(m_ij[i, j])
+    ]
+    pair_values = np.array([m_ij[i, j] for (i, j) in pairs])
+
+    # --- Chirality sign from initial guess ---
+    expected_chirality_sign = None
+    chirality_norm = None
+    if chirality_index is not None and rot_index is not None:
+        x_ref = initial_guess[rot_index, 0]
+        y_ref = initial_guess[rot_index, 1]
+        x_chi = initial_guess[chirality_index, 0]
+        y_chi = initial_guess[chirality_index, 1]
+        cross = x_ref * y_chi - y_ref * x_chi
+        expected_chirality_sign = np.sign(cross)
+        chirality_norm = radius[rot_index] * radius[chirality_index]
+        if abs(cross) < 1e-6:
+            raise ValueError(
+                f"chirality_index={chirality_index} is collinear with "
+                f"rot_index={rot_index}; cannot determine chirality sign"
+            )
+
+    return _Problem(
+        n_ant=n_ant,
+        x0=x0,
+        lower=lower,
+        upper=upper,
+        center=center,
+        radius=np.asarray(radius, dtype=float),
+        pairs=pairs,
+        pair_values=pair_values,
+        sqrt_radius_weight=np.sqrt(radius_weight),
+        sqrt_rotation_weight=np.sqrt(rotation_weight),
+        sqrt_chirality_weight=np.sqrt(chirality_weight),
+        rot_index=rot_index,
+        rot_degrees=rot_degrees,
+        chirality_index=chirality_index,
+        expected_chirality_sign=expected_chirality_sign,
+        chirality_norm=chirality_norm,
+    )
+
+
+def _finalize_result(result, residuals_fn):
+    """Normalise a least_squares result for interchange with callers that
+    expect a scalar objective and an iteration count.
+
+    ``scipy.optimize.least_squares`` stores the residual *vector* in
+    ``result.fun`` and exposes no ``.nit``.  We overwrite ``.fun`` with the
+    scalar sum-of-squares objective and add ``.nit`` (Jacobian evaluations
+    as a proxy) so the result matches the historical contract of
+    :func:`calibrate` / :func:`calibrate_irls`.
+    """
+    result.fun = float(np.sum(residuals_fn(result.x) ** 2))
+    result.nit = getattr(result, "njev", getattr(result, "nfev", 0))
+    return result
 
 
 def calibrate(
@@ -153,6 +411,7 @@ def calibrate(
         Measured distances from each antenna to the reference point (mm).
     m_ij : (N, N) array
         Matrix of inter-antenna distances (mm); NaN where unmeasured.
+        Only the upper triangle (i < j) is used so each pair is counted once.
     initial_guess : (N, 2) array
         Initial antenna positions in mm.
     center : (float, float)
@@ -176,95 +435,62 @@ def calibrate(
     rotation_weight : float
         Weight applied to the rotation constraint term.
     maxiter : int
-        Maximum iterations for the optimiser.
+        Maximum number of function evaluations for the optimiser.
     tol : float or None
-        Tolerance for termination.
+        Convergence tolerance — sets ``ftol``, ``xtol`` and ``gtol`` of the
+        trust-region (``trf``) least-squares solver.  ``None`` uses the
+        scipy defaults.
 
     Returns
     -------
     result : OptimizeResult
-        The scipy optimisation result.  ``result.x`` is the flat parameter
-        vector (x0, y0, x1, y1, …) in mm.
+        Result of :func:`scipy.optimize.least_squares` (method ``"trf"``).
+        For convenience ``result.fun`` is overwritten with the scalar
+        sum-of-squares objective and ``result.nit`` holds the Jacobian
+        evaluation count.  ``result.x`` is the flat parameter vector
+        ``(x0, y0, x1, y1, …)`` in mm.
+
+    Raises
+    ------
+    ValueError
+        If ``initial_guess`` or ``m_ij`` dimensions disagree with
+        ``len(radius)``, or if ``rot_index``/``chirality_index`` are outside
+        ``[0, n_ant)``.
     """
-    n_ant = len(radius)
+    prob = _build_problem(
+        radius,
+        m_ij,
+        initial_guess,
+        center=center,
+        rot_index=rot_index,
+        rot_degrees=rot_degrees,
+        chirality_index=chirality_index,
+        chirality_weight=chirality_weight,
+        max_position_error=max_position_error,
+        radius_weight=radius_weight,
+        rotation_weight=rotation_weight,
+    )
 
-    # --- Build the initial flat parameter vector ---
-    x0 = np.zeros(2 * n_ant)
-    for i in range(n_ant):
-        x0[_i_x(i)] = initial_guess[i, 0]
-        x0[_i_y(i)] = initial_guess[i, 1]
-
-    # --- Build bounds ---
-    bounds = []
-    for i in range(n_ant):
-        cx, cy = initial_guess[i, 0], initial_guess[i, 1]
-        bounds.append((cx - max_position_error, cx + max_position_error))
-        bounds.append((cy - max_position_error, cy + max_position_error))
-
-    # --- Pre-compute non-NaN inter-antenna pairs ---
-    non_nan_pairs = []
-    non_nan_values = []
-    for i in range(n_ant):
-        for j in range(n_ant):
-            if not np.isnan(m_ij[i, j]):
-                non_nan_pairs.append((i, j))
-                non_nan_values.append(m_ij[i, j])
-    non_nan_values = np.array(non_nan_values)
-
-    # --- Chirality sign from initial guess ---
-    expected_chirality_sign = None
-    chirality_norm = None
-    if chirality_index is not None and rot_index is not None:
-        x_ref = initial_guess[rot_index, 0]
-        y_ref = initial_guess[rot_index, 1]
-        x_chi = initial_guess[chirality_index, 0]
-        y_chi = initial_guess[chirality_index, 1]
-        cross = x_ref * y_chi - y_ref * x_chi
-        expected_chirality_sign = np.sign(cross)
-        chirality_norm = radius[rot_index] * radius[chirality_index]
-        if abs(cross) < 1e-6:
-            raise ValueError(
-                f"chirality_index={chirality_index} is collinear with "
-                f"rot_index={rot_index}; cannot determine chirality sign"
-            )
-
-    def chirality_penalty(x):
-        if expected_chirality_sign is None:
-            return 0.0
-        x_ref, y_ref = _p(x, rot_index)
-        x_chi, y_chi = _p(x, chirality_index)
-        cross = x_ref * y_chi - y_ref * x_chi
-        normalized = cross / chirality_norm
-        return min(0.0, normalized * expected_chirality_sign)
-
-    # --- Residual functions ---
-    def radius_residual(x):
-        pred = np.array([dist(center, _p(x, i)) for i in range(n_ant)])
-        return pred - radius
-
-    def m_ij_residual(x):
-        pred = np.array([dist(_p(x, i), _p(x, j)) for (i, j) in non_nan_pairs])
-        return pred - non_nan_values
-
-    def rot_residual(x):
-        if rot_index is None or rot_degrees is None:
-            return 0.0
-        xi, yi = _p(x, rot_index)
-        return geo_angle(xi, yi) - rot_degrees
-
-    def objective(x):
-        val = np.sum(radius_residual(x) ** 2) * radius_weight
-        val += np.sum(m_ij_residual(x) ** 2)
-        val += (rot_residual(x) ** 2) * rotation_weight
-        val += (chirality_penalty(x) ** 2) * chirality_weight
-        return val
-
-    options = {"maxiter": maxiter}
     if tol is not None:
-        options["xatol"] = tol
-        options["fatol"] = tol
-
-    return minimize(objective, x0, bounds=bounds, options=options)
+        result = least_squares(
+            prob.combined_residuals,
+            prob.x0,
+            bounds=prob.bounds,
+            method="trf",
+            max_nfev=maxiter,
+            ftol=tol,
+            xtol=tol,
+            gtol=tol,
+        )
+    else:
+        result = least_squares(
+            prob.combined_residuals,
+            prob.x0,
+            bounds=prob.bounds,
+            method="trf",
+            max_nfev=maxiter,
+        )
+    return _finalize_result(result, prob.combined_residuals)
 
 
 def _tukey_weights(residuals, scale=4.685):
@@ -337,101 +563,33 @@ def calibrate_irls(
     else:
         raise ValueError(f"Unknown weight_function: {weight_function}")
 
-    n_ant = len(radius)
+    prob = _build_problem(
+        radius,
+        m_ij,
+        initial_guess,
+        center=center,
+        rot_index=rot_index,
+        rot_degrees=rot_degrees,
+        chirality_index=chirality_index,
+        chirality_weight=chirality_weight,
+        max_position_error=max_position_error,
+        radius_weight=radius_weight,
+        rotation_weight=rotation_weight,
+    )
 
-    # --- Build initial flat parameter vector ---
-    x0 = np.zeros(2 * n_ant)
-    for i in range(n_ant):
-        x0[_i_x(i)] = initial_guess[i, 0]
-        x0[_i_y(i)] = initial_guess[i, 1]
+    n_meas = prob.n_radius + prob.n_ij
+    weights = np.ones(prob.n_total)
+    prev_x = prob.x0.copy()
 
-    # --- Build bounds ---
-    bounds_lower = []
-    bounds_upper = []
-    for i in range(n_ant):
-        cx, cy = initial_guess[i, 0], initial_guess[i, 1]
-        bounds_lower.append(cx - max_position_error)
-        bounds_lower.append(cy - max_position_error)
-        bounds_upper.append(cx + max_position_error)
-        bounds_upper.append(cy + max_position_error)
-    bounds = (bounds_lower, bounds_upper)
-
-    # --- Pre-compute non-NaN inter-antenna pairs ---
-    non_nan_pairs = []
-    non_nan_values = []
-    for i in range(n_ant):
-        for j in range(n_ant):
-            if not np.isnan(m_ij[i, j]):
-                non_nan_pairs.append((i, j))
-                non_nan_values.append(m_ij[i, j])
-    non_nan_values = np.array(non_nan_values)
-
-    n_radius = n_ant
-    n_ij = len(non_nan_values)
-    n_rot = 1 if (rot_index is not None and rot_degrees is not None) else 0
-    n_chirality = 1 if (chirality_index is not None and rot_index is not None) else 0
-    n_total = n_radius + n_ij + n_rot + n_chirality
-
-    # --- Chirality sign from initial guess ---
-    expected_chirality_sign = None
-    chirality_norm = None
-    if n_chirality:
-        x_ref = initial_guess[rot_index, 0]
-        y_ref = initial_guess[rot_index, 1]
-        x_chi = initial_guess[chirality_index, 0]
-        y_chi = initial_guess[chirality_index, 1]
-        cross = x_ref * y_chi - y_ref * x_chi
-        expected_chirality_sign = np.sign(cross)
-        chirality_norm = radius[rot_index] * radius[chirality_index]
-        if abs(cross) < 1e-6:
-            raise ValueError(
-                f"chirality_index={chirality_index} is collinear with "
-                f"rot_index={rot_index}; cannot determine chirality sign"
-            )
-
-    sqrt_radius_weight = np.sqrt(radius_weight)
-    sqrt_rotation_weight = np.sqrt(rotation_weight)
-    sqrt_chirality_weight = np.sqrt(chirality_weight)
-
-    def combined_residuals(x):
-        """Flat residual vector (unweighted)."""
-        res = np.zeros(n_total)
-        # Radius residuals
-        for i in range(n_ant):
-            res[i] = sqrt_radius_weight * (dist(center, _p(x, i)) - radius[i])
-        # Inter-antenna residuals
-        for k, (i, j) in enumerate(non_nan_pairs):
-            res[n_radius + k] = dist(_p(x, i), _p(x, j)) - non_nan_values[k]
-        # Rotation residual
-        if n_rot:
-            xi, yi = _p(x, rot_index)
-            res[n_radius + n_ij] = sqrt_rotation_weight * (
-                geo_angle(xi, yi) - rot_degrees
-            )
-        # Chirality residual
-        if n_chirality:
-            x_ref, y_ref = _p(x, rot_index)
-            x_chi, y_chi = _p(x, chirality_index)
-            cross = x_ref * y_chi - y_ref * x_chi
-            normalized = cross / chirality_norm
-            res[n_radius + n_ij + n_rot] = sqrt_chirality_weight * min(
-                0.0, normalized * expected_chirality_sign
-            )
-        return res
-
-    # --- IRLS outer loop ---
-    weights = np.ones(n_total)
-    prev_x = x0.copy()
-
-    for irls_iter in range(irls_max_iter):
+    for _ in range(irls_max_iter):
 
         def weighted_residuals(x):
-            return np.sqrt(weights) * combined_residuals(x)
+            return np.sqrt(weights) * prob.combined_residuals(x)
 
         res_ls = least_squares(
             weighted_residuals,
             prev_x,
-            bounds=bounds,
+            bounds=prob.bounds,
             method="trf",
             max_nfev=maxiter,
             xtol=1e-12,
@@ -439,12 +597,10 @@ def calibrate_irls(
         )
         new_x = res_ls.x
 
-        # Update weights from measurement residuals only (exclude rotation
-        # and chirality constraints — they are priors, not noisy data).
-        raw_res = combined_residuals(new_x)
-        n_meas = n_radius + n_ij
+        # Update weights from measurement residuals only (rotation and
+        # chirality are priors, not noisy data, so they stay at weight 1).
+        raw_res = prob.combined_residuals(new_x)
         weights[:n_meas] = weight_fn(raw_res[:n_meas])
-        # rotation and chirality weights stay at 1.0
 
         shift = np.max(np.abs(new_x - prev_x))
         prev_x = new_x
@@ -452,13 +608,8 @@ def calibrate_irls(
         if shift < irls_tol:
             break
 
-    # Build a MinimizeResult-compatible result
     res_ls.x = prev_x
-    res_ls.fun = np.sum(combined_residuals(prev_x) ** 2)
-    res_ls.nfev = getattr(res_ls, "nfev", 0)
-    res_ls.njev = getattr(res_ls, "njev", 0)
-    res_ls.nit = getattr(res_ls, "nit", 0)
-    return res_ls
+    return _finalize_result(res_ls, prob.combined_residuals)
 
 
 def result_to_positions(result, n_ant):
@@ -482,7 +633,10 @@ def result_to_json(result, n_ant, title=None):
 
 
 def compute_residuals(result, radius, m_ij, n_ant):
-    """Return (radius_residuals, ij_residuals, ij_pairs) for diagnostics."""
+    """Return (radius_residuals, ij_residuals, ij_pairs) for diagnostics.
+
+    Inter-antenna pairs are reported once each (upper triangle, i < j).
+    """
     x = result.x
 
     r_res = np.array([dist((0, 0), _p(x, i)) - radius[i] for i in range(n_ant)])
@@ -490,7 +644,7 @@ def compute_residuals(result, radius, m_ij, n_ant):
     pairs = []
     ij_res = []
     for i in range(n_ant):
-        for j in range(n_ant):
+        for j in range(i + 1, n_ant):
             if not np.isnan(m_ij[i, j]):
                 pairs.append((i, j))
                 ij_res.append(dist(_p(x, i), _p(x, j)) - m_ij[i, j])
@@ -570,7 +724,7 @@ def print_residual_report(result, radius, m_ij, n_ant):
     p50 = np.percentile(abs_ij, 50)
     p90 = np.percentile(abs_ij, 90)
 
-    print(f"\nInter-antenna residual statistics:")
+    print("\nInter-antenna residual statistics:")
     print(f"  Median Absolute Deviation: {mad:.2f} mm")
     print(f"  Standard Deviation:       {std:.2f} mm")
     print(f"  50th percentile |res|:    {p50:.2f} mm")
@@ -578,10 +732,10 @@ def print_residual_report(result, radius, m_ij, n_ant):
 
     big = []
     for r, (i, j) in zip(ij_res, pairs):
-        if np.abs(r) > p90 and i > j:
+        if np.abs(r) > p90:
             big.append((r, i, j))
 
     if big:
-        print(f"\nLargest residuals (>90th pct):")
+        print("\nLargest residuals (>90th pct):")
         for r, i, j in sorted(big):
             print(f"  res[{i},{j}] = {r:+.1f}")
