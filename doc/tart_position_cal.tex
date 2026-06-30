@@ -16,30 +16,36 @@
 \author[1]{Kirsten E. Franklin}
 \affil[1]{Department of Physics, University of Otago, Box 56, Dunedin, New Zealand}
 \affil[2]{Department of Physics \& Electronics, Rhodes University, Makhanda, South Africa}
-\affil[*]{Corresponding Author: tim@elec.ac.nz}
+\affil[*]{Corresponding Author: tim.molteno@otago.ac.nz}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-	The Transient Array Radio Telescope is an open-source all-sky imaging radio telescope.  For interferometric imaging, the positions of antennas in the array must be known accurately. This paper presents the technique used to calibrate the antenna positions. The technique reports outliers that are then re-measured, and is repeated until the desired accuracy is achieved. It is robust, can be performed with simple equipment, and provides accuracy to within $\sim 0.01$ wavelengths, sufficient for interferometric imaging. To determine the global orientation of the array, a further step is required that uses geographical bearings. The results of the TART deployment at the University of Namibia are presented, demonstrating residual errors on the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}.
+	The Transient Array Radio Telescope is an open-source all-sky imaging radio telescope.  For interferometric imaging, the positions of antennas in the array must be known accurately. This paper presents the technique used to calibrate the antenna positions. The technique reports outliers that are then re-measured, and is repeated until the desired accuracy is achieved. It is robust, can be performed with simple equipment and provides accuracy to within $\sim 0.01$ wavelengths, sufficient for interferometric imaging. To determine the global orientation of the array, a further step is required that uses geographical bearings. The results of the TART deployment at the University of Namibia are presented, demonstrating residual errors on the millimeter scale. The calibration algorithm is implemented in the open-source Python package \texttt{tart-position-cal}.
 \end{abstract}
 
 \section{Background and Introduction}
 
-The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and to date  TART telescopes have been deployed in Oceania, Africa, Europe, and Asia as a platform to detect radio transients and for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces attendees to radio astronomy, radio imaging, and interferometry, and at the same time assembles and installs a TART radio telescope. The antenna array contains 24 antennas which are typically arranged on five spiral arms, although the layout can vary. The position calibration process for the antenna array must determine the relative locations of the antennas to within $\approx 5$~mm.
+%%  TKTK. This does not mention global orientation
+
+The Transient Array Radio Telescope (TART) is an all-sky imaging interferometer that operates in the L1 band (1.575~GHz). The project is open-source~\cite{tart} and to date  TART telescopes have been deployed in Oceania, Africa, Europe, and Asia as a platform to detect radio transients and for the development of new radio imaging algorithms. TART telescopes are often installed as part of a week-long workshop that introduces attendees to radio astronomy, radio imaging, and interferometry, and at the same time assembles and installs a TART radio telescope. 
+
+The TART antenna array contains 24 antennas that are typically arranged on five spiral arms, although the layout can vary. For interferometric imaging~\cite{thomsonmoranswenson}, 
+
+In an interferometric array, an arbitrary point is chosen as the {\em phase-centre} of the array. This phase-centre is the (0,0) point for the antenna coordinate frame. The purpose of this calibration is to accurately estimate the East-North-Up (ENU) coordinates of each antenna with the phase center at the origin.
+
+The position calibration process for the antenna array must determine the co-ordinates of the antennas to within $\approx 5$~mm. The calibration process must involve easy-to-make measurements and be robust to accidental errors in measurement. This paper outlines an iterative calibration process that meets these requirements. 
 
 \begin{figure}
 	\includegraphics[width=\linewidth]{fig/botswana_calibration.png}
 	\caption{Aerial view of a TART being calibrated by attendees at a TART workshop hosted at the Botswana International University of Science and Technology, in March 2025. The attendees are taking measurements of the distance between pairs of antennas in order to accurately determine their locations.}
 \end{figure}
 
-The calibration process must involve easy-to-make measurements, and be robust to accidental errors in measurement. This paper outlines an iterative calibration process that meets these requirements.
+
 
 \section{Method}
-
-In an interferometric array, an arbitrary point is chosen as the {\em phase-centre} of the array. This phase-centre is the (0,0) point for the antenna coordinate frame. The purpose of this calibration is to estimate accurately the positions of each antenna with respect to this phase centre.
 
 The calibration process involves measuring two kinds of distances: the \emph{radial distances} between the phase-centre and the centre of each antenna, and the {\em pairwise distances} between all antennas. There are $N$ measurements of radial distance $r_i$, and there are $\frac{1}{2} N (N-1)$ pairwise distances, where $N$ is the number of antennas in the array. For the TART ($N=24$) there are 276 pairwise distances.
 
@@ -54,30 +60,39 @@ As the distance measurements do not constrain the global rotation of the array, 
 The purpose of the algorithm is to estimate the 24 antenna positions in the $x$--$y$ plane that are most consistent with the measurements.
 
 
-\subsection{Global Orientation Calibration}
+\subsection{Global Orientation Measurement}
 
-The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase-centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase-centre must be measured independently.
+The global orientation of the array cannot be determined from distance measurements alone, as the entire array can be rotated about the phase-centre without changing any of the $r_i$ or $\delta_{ij}$ values. To fix the absolute orientation, the geographic bearing of one antenna from the phase-centre must be measured independently. %TKTK rework paragraph boundaries in this section
 
-This is accomplished by identifying an antenna that has a radial vector that aligns with a distant, identifiable landmark visible on satellite imagery (e.g.\ Google Maps). The geographic coordinates (latitude and longitude) of both the phase-centre and the landmark are recorded.
+This is accomplished by identifying an antenna that has a radial vector that aligns with a distant identifiable landmark visible on satellite imagery (e.g. Google Maps). The geographic coordinates (latitude and longitude) of both the phase-centre and the landmark are recorded, and from these two geographic coordinates, the expected bearing $\theta_k$ of the reference antenna $k$ is computed as an inverse geodesic problem . The tart-position-cal package described in Section~\ref{sec:software}, provides a function to do this.
 
-From these two geographic coordinates, the expected bearing $\theta_k$ of the reference antenna $k$ is computed.
-This $\theta_k$ measurement is supplied to the least-squares procedure as $L_\theta$ in Equation~4, described below. In the software described in~\ref{sec:software} $\theta_k$ is computed as an inverse geodesic problem implemented in the PROJ library~\cite{proj}.
+This $\theta_k$ measurement is supplied to the least-squares procedure as $L_\theta$ in Equation~4, described below.
 
-Given any set $\{x_i, y_i\}$ of 24 antenna positions we can simulate all the measurements, $\theta_k'$, $\delta_{ij}'$ and $\theta_k'$ that we would expect.
+The global orientation estimate is refined as part of the continuous interferometric calibration that is performed during normal telescope operation~\cite{moltenocalibratoion}.
+
+
+\subsection{Least-Squares Estimator}
+
+Given any set $\{x_i, y_i\}$ of 24 antenna positions, we can simulate all the measurements $\theta_k'$, $\delta_{ij}'$ and $\theta_k'$, i.e.,
+\begin{align*}
+	r^s_i         & =  \sqrt{x_i^2 + y_i^2}                \\
+	\delta^s_{ij} & = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \\
+	\theta^s_k    & = \arctan2\!\left(x_k, y_k\right).
+\end{align*}
+These simulated measurements will be close to the recorded measurements if the $\{x_i, y_i\}$ are close to the true values. 
+
+The differences between the simulated measurements and the actual measurements are called {\em residuals}. The set of positions that minimizes the squared residuals $L(\{x_i, y_i\})$, is a good estimate of the true antenna positions $\{x_i, y_i\}$. We form least-squares estimators from the sum of the radius, difference, and $\theta$ residuals squared:
+\begin{align*}
+    L_r(\{x_i, y_i\})      & = \sum_{i=1}^{N} \left( r_i - r^s_i \right)^2                  \\
+	L_{ij}(\{x_i, y_i\})   & = \sum_{i,j=1}^{N} \left( \delt^sa_ -  \delta^s_{ij} \right)^2 \\
+	L_\theta(\{x_i, y_i\}) & = \left( L_\theta(\{x_i, y_i\})\theta_k - \theta^s_k \right)^2.
+\end{align*}
+
+As we wish to minimize each of these estimators, we form a combined estimator $L(\{x_i, y_i\})$ from the weighted sum of these other estimators:
 \begin{align}
-	r_i'         & =  \sqrt{x_i^2 + y_i^2}                \\
-	\delta_{ij}' & = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2} \\
-	\theta_k'    & = \arctan2\!\left(x_k, y_k\right)
+	L(\{x_i, y_i\})       & = L_r(\{x_i, y_i\}) + L_{ij}(\{x_i, y_i\}) + \lambda L_\theta(\{x_i, y_i\})
 \end{align}
-
-These simulated measurements will be close to the recorded measurements if the $\{x_i, y_i\}$ are close to the true values. The differences between the simulated measurements and the actual measurements are called {\em residuals}. The set of positions that minimizes the squared residuals $L(\{x_i, y_i\})$, is a good estimate of the true antenna positions $\{x_i, y_i\}$.
-\begin{align}
-	L(x, y)       & = L_r(x,y) + L_{ij}(x,y) + \lambda L_\theta(x,y)                \\
-	L_r(x,y)      & = \sum_{i=1}^{N} \left( r_i - r_i' \right)^2                    \\
-	L_{ij}(x,y)   & = \sum_{i,j=1}^{N} \left( \delta_{ij} -  \delta_{ij}' \right)^2 \\
-	L_\theta(x,y) & = \left( \theta_k - \theta_k' \right)^2
-\end{align}
-In practice, the angular residual term is also weighted by a factor of $\lambda$ relative to the pairwise term, reflecting the higher confidence in the radial measurements.
+The angular residual $L_\theta$, is weighted by a factor of $\lambda \sim 100$ relative to the other term, reflecting the desire to constrain the rotation of the array to achieve the desired global orientation.
 
 \subsection{Algorithm}
 
@@ -92,23 +107,17 @@ tart-position-cal \
     --rot-degrees 18.1125
 \end{verbatim}
 
+This results in a list of residuals.
+
 \begin{figure*}
 	\includegraphics[width=\linewidth]{fig/final_positions.png}
-	\caption{Initial position estimates (blue) and the final calibrated positions (orange) for the TART antenna array. Antenna indices are labeled. This shows that the antenna, as constructed was assembled with the spiral arms clockwise oriented, in contrast to the initial position assumptions. }
+	\caption{Initial position estimates (blue) and the final calibrated positions (orange) for the TART antenna array. Antenna indices are labeled. This shows that the antenna, as constructed, was assembled with the spiral arms clockwise oriented, in contrast to the initial position assumptions. }
 \end{figure*}
 
 
-
-\begin{equation}
-	\Delta\theta = -(\theta_k - \beta)
-\end{equation}
-
-This rotation is applied to all antenna positions either as a constraint within the least-squares minimization (as $L_\theta$ in Equation~4), or as a post-optimization rotation of the calibrated positions.
-
 \subsection{Residuals and Iterative Refinement}
 
-The differences between the simulated measurements of the calibrated positions and the actual measurements are called residuals. If one or more of the residuals are large, it usually indicates a measurement error. These large residuals are flagged and the corresponding measurements are re-checked and corrected. The optimization is then re-run with the corrected measurements. This iterative process continues until all residuals fall below an acceptable threshold.
-
+If one or more of the residuals are large, it usually indicates that the associated measurement is not consistent with the other measurements. These measurements that result in large residuals are repeated and the corresponding measurements are repeated. The algorithm is then re-run with the corrected measurements to achieve a new set of residuals. This iterative process continues until all residuals fall below an acceptable threshold. A flow-chart of this is shown in Figure~\ref{fig:flowchart}.
 
 \begin{figure}[ht]
 	\centering
@@ -120,7 +129,7 @@ The differences between the simulated measurements of the calibrated positions a
 				arrow/.style={-{Stealth[scale=0.9]}, thick},
 			]
 
-			\node[box] (start)                    {Initial position\\estimates $\{x_i, y_i\}$};
+			\node[box] (start)                    {Global orientation and initial position\\estimates $\{x_i, y_i\}, \theta_k$};
 			\node[box] (measure) [below=of start] {Take measurements\\$r_i$ (radial), $\delta_{ij}$ (pairwise)};
 			\node[box] (optimize) [below=of measure] {Least-squares\\minimization of $L(x,y)$};
 			\node[box] (residuals) [below=of optimize] {Compute residuals\\$\epsilon_i = r_i - r_i^s$,\\$\epsilon_{ij} = \delta_{ij} - \delta_{ij}^s$};
@@ -189,7 +198,7 @@ Dependencies are restricted to widely available scientific Python libraries: Num
 
 \section{Results: UNAM Deployment}
 
-The TART telescope at the University of Namibia (UNAM) in Windhoek is located at latitude $-22.6121^\circ$, longitude $17.0568^\circ$. The 24 antennas are arranged on five spiral arms, extending to a maximum radius of approximately 1.7~m from the phase centre.
+The TART telescope at the University of Namibia (UNAM) in Windhoek is located at latitude $-22.6121^\circ$, longitude $17.0568^\circ$. The 24 antennas are arranged on five spiral arms, extending to a maximum radius of approximately 1.7~m from the phase-centre.
 
 \subsection{Initial Conditions}
 
@@ -308,6 +317,14 @@ The iterative nature of the method, with outlier flagging and re-measurement, ma
 \section{Future Work}
 
 The TART telescope operates in the L1 band at 1.575~GHz, which is shared with GNSS signals. The raw telescope data streams contain embedded GNSS satellite signals at known frequencies. Post-processing these signals via software-defined radio techniques could yield direct time-difference-of-arrival (TDOA) measurements between antenna pairs, providing an independent and fully automated means of estimating antenna positions. Since GNSS satellite ephemerides are precisely known, this approach could in principle determine absolute antenna positions without any manual surveying. This is an area of active research. The main challenge lies in the low signal-to-noise ratio of the GNSS signals in the TART's broad-beam antennas and the short baselines ($<$\,2~m), which produce TDOA values on the order of nanoseconds.
+
+\section*{Data Availability}
+
+The data underlying this article are available as part of the tart-position-cal github repository~\cite{moltento2026tartpositioncal}.
+
+\subsection*{Author Contributions}
+
+The contributions of the authors, based on the CRediT system, are as follows: TM was responsible for conceptualization, methodology, software, validation, formal analysis, investigation, writing—original draft, visualization. KF contributed to writing—review and editing.
 
 \bibliographystyle{plainnat}
 \bibliography{position-cal}
